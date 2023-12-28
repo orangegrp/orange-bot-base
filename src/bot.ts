@@ -1,6 +1,7 @@
 import type discord from "discord.js"
 import HelpManager from "./helpManager.js";
 import { loadModules } from "./moduleLoader.js";
+import { Fetcher } from "./fetcher.js"
 import type { PermissionResolvable, Snowflake } from "discord.js";
 import { type CommandExecutor, CommandManager } from "./commandManager.js";
 import { type Command } from "./command.js";
@@ -10,12 +11,14 @@ class Bot {
     prefix: string;
     helpManager: HelpManager;
     commandManager: CommandManager;
+    fetcher: Fetcher;
     private chatCommands: { [i: string]: ChatCommand } = {}
     constructor(client: discord.Client, prefix: string) {
         this.client = client;
         this.prefix = prefix;
         this.helpManager = new HelpManager(this);
         this.commandManager = new CommandManager(this);
+        this.fetcher = new Fetcher(this.client);
         client.on("messageCreate", msg => {
             if (!msg.content.startsWith(this.prefix)) return;
             const args = msg.content.replace(this.prefix, "").split(" ");
@@ -39,6 +42,14 @@ class Bot {
     addCommand(command: Command, executor: CommandExecutor) {
         this.commandManager.addCommand(command, executor);
     }
+    getUser(id: Snowflake) {
+        return this.fetcher.getUser(id);
+    }
+    getGuild(id: Snowflake) {
+        return this.fetcher.getGuild(id);
+    }
+    getMember(guildId: Snowflake, userId: Snowflake) {
+        return this.fetcher.getMember(guildId, userId);
     }
 }
 type CommandOptions = { [i: string]: PermissionResolvable }
