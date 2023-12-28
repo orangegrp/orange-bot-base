@@ -1,16 +1,21 @@
 import type discord from "discord.js"
 import HelpManager from "./helpManager.js";
 import { loadModules } from "./moduleLoader.js";
+import type { PermissionResolvable, Snowflake } from "discord.js";
+import { type CommandExecutor, CommandManager } from "./commandManager.js";
+import { type Command } from "./command.js";
 
 class Bot {
     client: discord.Client;
     prefix: string;
     helpManager: HelpManager;
+    commandManager: CommandManager;
     private chatCommands: { [i: string]: ChatCommand } = {}
     constructor(client: discord.Client, prefix: string) {
         this.client = client;
         this.prefix = prefix;
         this.helpManager = new HelpManager(this);
+        this.commandManager = new CommandManager(this);
         client.on("messageCreate", msg => {
             if (!msg.content.startsWith(this.prefix)) return;
             const args = msg.content.replace(this.prefix, "").split(" ");
@@ -31,17 +36,16 @@ class Bot {
     addChatCommand(name: string, callback: (msg: discord.Message, args: string[]) => void, opts?: CommandOptions) {
         this.chatCommands[name] = { callback, opts: opts || {} };
     }
-    loadModules(moduleDir: string) {
-        loadModules(this, moduleDir);
+    addCommand(command: Command, executor: CommandExecutor) {
+        this.commandManager.addCommand(command, executor);
+    }
     }
 }
+type CommandOptions = { [i: string]: PermissionResolvable }
 type ChatCommand = {
     opts: CommandOptions
     callback: (msg: discord.Message, args: string[]) => void
 }
-type CommandOptions = {
-    /**discord.js PermissionsBitField */
-    permissionRequired?: discord.PermissionResolvable
-}
+
 export { Bot }
-export type { CommandOptions }
+export { ResolveCommandArgs } from "./command.js"
