@@ -1,5 +1,4 @@
 import { ApplicationCommandOptionType, type CommandInteractionOption } from "discord.js";
-import type { M } from "ts-algebra"
 import type { User, GuildMember, Attachment, Role, Channel, Snowflake, APIInteractionDataResolvedGuildMember, APIInteractionDataResolvedChannel, APIRole } from "discord.js"
 
 enum ArgType {
@@ -123,7 +122,7 @@ type ResolveType<T> =
   : T extends ArgType.NUMBER      ? number
   : any;
 
-type ResolveRequired<T extends any, R extends boolean | undefined> = R extends true ? T : undefined;
+type ResolveRequired<T extends any, R extends boolean | undefined> = R extends true ? T : T | undefined;
 type ResolveArgs<T extends CommandArgs> = { [KEY in keyof T]: ResolveRequired<ResolveType<T[KEY]["type"]>, T[KEY]["required"]> }
 //type ResolveSubCommandGroup<T extends SubCommandGroup> = (ResolveSubCommand<T["options"][keyof T["options"]]>);
 type ResolveSubCommand<T extends SubCommand | SubCommandGroup, NAME extends string> = 
