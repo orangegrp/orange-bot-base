@@ -10,13 +10,23 @@ async function loadModules(bot: import("./bot.js").Bot, moduleDir: string) {
 
     const dir = readdirSync(fileURLToPath(moduleDir));
 
-    for (const file of dir) {
-        if (!file.endsWith(".js")) continue;
-        const module = await import(join(moduleDir, file))
-        module.default(bot);
-        logger.ok(`Loaded module ${chalk.white(file.replace(".js", ""))}`)
+    for (const fileName of dir) {
+        if (!fileName.endsWith(".js")) continue;
+        const module = await import(join(moduleDir, fileName))
+        try {
+            await module.default(bot);
+            logger.ok(`Loaded module ${chalk.white(fileName)}`)
+        }
+        catch (e) {
+            if (e instanceof Error) {
+                logger.error(`Error loading module ${chalk.white(fileName)}:`);
+                logger.error(e);
+                continue;
+            }
+            logger.error(`Unknown error loading module ${chalk.white(fileName)}.`);
+        }
     }
-    logger.log(chalk.green("Done loading modules."))
+    logger.ok("Done loading modules.")
 }
 
 

@@ -42,8 +42,8 @@ class Bot {
     addCommand(command: Command, executor: CommandExecutor) {
         this.commandManager.addCommand(command, executor);
     }
-    loadModules(moduleDir: string) {
-        loadModules(this, moduleDir);
+    async loadModules(moduleDir: string) {
+        await loadModules(this, moduleDir);
     }
     getUser(id: Snowflake) {
         return this.fetcher.getUser(id);
