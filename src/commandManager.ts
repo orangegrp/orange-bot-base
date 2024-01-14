@@ -1,12 +1,13 @@
 import type { Bot, ResolveCommandArgs } from "./bot.js";
 import { Events } from "discord.js"
-import type { ChatInputCommandInteraction, Interaction } from "discord.js"
+import type { ChatInputCommandInteraction, Interaction, Snowflake } from "discord.js"
 import { type Command, parseInteractionOptions } from "./command.js"
 
 type CommandExecutor<T extends Command> = (interaction: ChatInputCommandInteraction, args: ResolveCommandArgs<T>) => void
 
 type CommandWithExecutor<T extends Command> = Command & {
     executor: CommandExecutor<T>;
+    id?: Snowflake;
 }
 
 class CommandManager {
@@ -38,4 +39,4 @@ class CommandManager {
 }
 
 
-export { CommandManager, CommandExecutor }
+export { CommandManager, CommandExecutor, CommandWithExecutor }

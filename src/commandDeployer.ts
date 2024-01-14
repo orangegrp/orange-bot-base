@@ -77,9 +77,11 @@ class CommandDeployer {
                 : this.mapCommandOptions(command.options),
         }
 
-        await this.rest.post(
+        const outCmd = await this.rest.post(
             guildId ? Routes.applicationGuildCommands(this.userId, guildId) 
-                    : Routes.applicationCommands(this.userId), { body: dcCmd  });
+                    : Routes.applicationCommands(this.userId), { body: dcCmd  }) as DiscordCommandFull;
+        
+        command.id = outCmd.id;
         return true;
     }
     private mapCommandOptions(opts: CommandOptions): (ApplicationCommandSubCommand | ApplicationCommandSubGroup)[] {
@@ -116,8 +118,9 @@ class CommandDeployer {
 
             // this code is cursed
             argsDc.push((arg.type == ArgType.STRING) ? (
-                    arg.autocomplete ? {
+                    !!arg.autocomplete ? {
                         description: arg.description,
+                        required: arg.required,
                         type: arg.type as number,
                         name: name,
                         autocomplete: true,
@@ -125,14 +128,16 @@ class CommandDeployer {
                         maxLength: arg.max_lenght
                     } : {
                         description: arg.description,
+                        required: arg.required,
                         type: arg.type as number,
                         name: name,
                         choices: arg.choices
                     }
                 )
                 : (arg.type == ArgType.INTEGER || arg.type == ArgType.NUMBER) ? (
-                    arg.autocomplete ? {
+                    !!arg.autocomplete ? {
                         description: arg.description,
+                        required: arg.required,
                         type: arg.type as number,
                         name: name,
                         autocomplete: true,
@@ -140,6 +145,7 @@ class CommandDeployer {
                         maxLength: arg.max_value
                     } : {
                         description: arg.description,
+                        required: arg.required,
                         type: arg.type as number,
                         name: name,
                         choices: arg.choices
@@ -147,8 +153,9 @@ class CommandDeployer {
                 )
                 : {
                     description: arg.description,
+                    required: arg.required,
                     type: arg.type as number,
-                    name: name
+                    name: name,
                 });
         }
 
@@ -175,6 +182,8 @@ class CommandDeployer {
                 toDeploy.push(name);
                 continue;
             }
+            command.id = commands[name].id;
+
             const discordCommand = commands[name];
             if (command.args) {
                 if (!discordCommand.options || !validateArgs(command.args, discordCommand.options)) {
@@ -260,14 +269,14 @@ function validateArgs(args: CommandArgs, options: readonly ApplicationCommandOpt
             if (arg.autocomplete !== argDc.autocomplete) return false;
             if (arg.min_length !== argDc.minLength) return false;
             if (arg.max_lenght !== argDc.maxLength) return false;
-            //if (arg.choices !== argDc.choices) return false;
+            if (!argDc.autocomplete && arg.choices !== argDc.choices) return false;
         }
         else if (arg.type == ArgType.INTEGER && argDc.type == ApplicationCommandOptionType.Integer ||
                  arg.type == ArgType.NUMBER && argDc.type == ApplicationCommandOptionType.Number) {
             if (arg.autocomplete !== argDc.autocomplete) return false;
             if (arg.min_value !== argDc.minValue) return false;
             if (arg.max_value !== argDc.maxValue) return false;
-            //if (arg.choices !== argDc.choices) return false;
+            if (!argDc.autocomplete && arg.choices !== argDc.choices) return false;
         }
     }
     // nothing wrong here, return true
