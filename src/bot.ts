@@ -5,17 +5,23 @@ import { Fetcher } from "./fetcher.js"
 import type { PermissionResolvable, Snowflake } from "discord.js";
 import { type CommandExecutor, CommandManager } from "./commandManager.js";
 import { type Command } from "./command.js";
+import { CommandDeployer } from "./commandDeployer.js";
+import { getLogger } from "orange-common-lib";
+
+const logger = getLogger("main");
 
 class Bot {
-    client: discord.Client;
-    prefix: string;
-    helpManager: HelpManager;
-    commandManager: CommandManager;
-    fetcher: Fetcher;
+    readonly client: discord.Client;
+    readonly prefix: string;
+    readonly helpManager: HelpManager;
+    readonly commandManager: CommandManager;
+    readonly fetcher: Fetcher;
     private chatCommands: { [i: string]: ChatCommand } = {}
-    constructor(client: discord.Client, prefix: string) {
+    private readonly token: string;
+    constructor(client: discord.Client, prefix: string, token: string) {
         this.client = client;
         this.prefix = prefix;
+        this.token = token;
         this.helpManager = new HelpManager(this);
         this.commandManager = new CommandManager(this);
         this.fetcher = new Fetcher(this.client);
@@ -35,13 +41,18 @@ class Bot {
                 this.chatCommands[cmd!]?.callback(msg, args);
             }
         })
+        client.on("ready", () => this.onLoggedIn());
     }
     addChatCommand(name: string, callback: (msg: discord.Message, args: string[]) => void, opts?: CommandOptions) {
         this.chatCommands[name] = { callback, opts: opts || {} };
     }
-    addCommand(command: Command, executor: CommandExecutor) {
+    addCommand<T extends Command>(command: T, executor: CommandExecutor<T>) {
         this.commandManager.addCommand(command, executor);
     }
+    /**
+     * Loads modules from a directory
+     * @param moduleDir Directory in which to look for module files
+     */
     async loadModules(moduleDir: string) {
         await loadModules(this, moduleDir);
     }
@@ -53,6 +64,23 @@ class Bot {
     }
     getMember(guildId: Snowflake, userId: Snowflake) {
         return this.fetcher.getMember(guildId, userId);
+    }
+    login() {
+        this.client.login(this.token);
+    }
+    private onLoggedIn() {
+        if (process.env.DEPLOY_COMMANDS == "true") {
+            const deployer = new CommandDeployer(this, this.token);
+
+            const guildId = process.env.DEPLOY_GUILD;
+            const global = process.env.DEPLOY_GLOBAL == "true";
+
+            if (!guildId && !global) {
+                logger.warn("Not deploying commands, \"DEPLOY_GUILD\" and \"DEPLOY_GLOBAL\" are not set.")
+                return;
+            }
+            deployer.deploy(guildId);
+        }
     }
 }
 type CommandOptions = { [i: string]: PermissionResolvable }

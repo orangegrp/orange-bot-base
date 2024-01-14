@@ -1,23 +1,24 @@
-import type { Bot } from "./bot.js";
-import { ChatInputCommandInteraction, Events, Interaction } from "discord.js"
-import { Command, parseInteractionOptions } from "./command.js"
+import type { Bot, ResolveCommandArgs } from "./bot.js";
+import { Events } from "discord.js"
+import type { ChatInputCommandInteraction, Interaction } from "discord.js"
+import { type Command, parseInteractionOptions } from "./command.js"
 
-type CommandExecutor = (interaction: ChatInputCommandInteraction, args: any) => void
+type CommandExecutor<T extends Command> = (interaction: ChatInputCommandInteraction, args: ResolveCommandArgs<T>) => void
 
-type CommandWithExecutor = Command & {
-    executor: CommandExecutor;
+type CommandWithExecutor<T extends Command> = Command & {
+    executor: CommandExecutor<T>;
 }
 
 class CommandManager {
     private readonly bot: Bot;
-    private readonly commands: Map<string, CommandWithExecutor>;
+    readonly commands: Map<string, CommandWithExecutor<any>>;
     constructor(bot: Bot) {
         this.bot = bot;
         this.commands = new Map();
         this.bot.client.on(Events.InteractionCreate, interaction => this.onInteraction(interaction))
     }
-    addCommand(command: Command, executor: CommandExecutor) {
-        const commandExec = command as CommandWithExecutor;
+    addCommand<T extends Command>(command: T, executor: CommandExecutor<T>) {
+        const commandExec = command as CommandWithExecutor<T>;
         commandExec.executor = executor;
     
         this.commands.set(command.name, commandExec)
