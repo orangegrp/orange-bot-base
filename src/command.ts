@@ -23,34 +23,41 @@ enum CommandType {
     MESSAGE = 3
 }
 
+type CommandArgChoice = {
+    /** Name of the choice option */
+    name: string,
+    /** Value for the choice option (string, integer, or double) */
+    value: string
+}
+
 type CommandArg = {
-    /** Type of option */
-    type: ArgType;
     /** 1-100 character description */
     description: string;
     /**If the parameter is required or optional--default false */
     required?: boolean;
-} & ({} | {
+} & ({
+    /** Type of option */
+    type: Exclude<ArgType, ArgType.STRING | ArgType.INTEGER | ArgType.NUMBER>;
+} | {
     /** Choices for `STRING`, `INTEGER`, and `NUMBER` types for the user to pick from, max `25` */
-    choices?: (number)[];
+    choices?: CommandArgChoice[];
     /** If the option is an `INTEGER` or `NUMBER` type, the minimum value permitted */
     min_value?: number;
     /** If the option is an `INTEGER` or `NUMBER` type, the maximum value permitted */
     max_value?: number;
+    /**If autocomplete interactions are enabled for this `STRING`, `INTEGER`, or `NUMBER` type option */
+    autocomplete?: boolean;
     type: ArgType.INTEGER | ArgType.NUMBER;
-}) & ({} | {
+} | {
     /** Choices for `STRING`, `INTEGER`, and `NUMBER` types for the user to pick from, max `25` */
-    choices?: (string)[];
+    choices?: CommandArgChoice[];
     /**	For option type `STRING`, the minimum allowed length (minimum of `0`, maximum of `6000`) */
     min_length?: number;
     /** For option type `STRING`, the maximum allowed length (minimum of `1`, maximum of `6000`) */
     max_lenght?: number;
-    type: ArgType.STRING;
-})
-& ({} | {
     /**If autocomplete interactions are enabled for this `STRING`, `INTEGER`, or `NUMBER` type option */
     autocomplete?: boolean;
-    type: ArgType.STRING | ArgType.INTEGER | ArgType.NUMBER;
+    type: ArgType.STRING;
 })
 type SubCommandGroup = {
     description: string;
@@ -64,6 +71,9 @@ type SubCommand = {
 }
 type CommandArgs = {
     [name: string]: CommandArg
+}
+type CommandOptions = {
+    [name: string]: SubCommandGroup | SubCommand
 }
 
 type Command = {
@@ -87,12 +97,14 @@ type Command = {
         /**
          * key-value pairs of subcommands or subcommand groups
          */
-        options: { [name: string]: SubCommandGroup | SubCommand }
+        options: CommandOptions,
+        args?: undefined,
     } | {
         /**
          * key-value pairs of command arguments
          */
-        args: CommandArgs
+        args: CommandArgs,
+        options?: undefined,
     }
 )
 
@@ -136,7 +148,7 @@ type ResolveSubCommands<T extends { [name: string]: SubCommand | SubCommandGroup
 /**@ts-ignore */
 type ResolveCommandArgs<T extends Command> = 
     T extends { args: CommandArgs } ? ResolveArgs<T["args"]> 
-  : T extends { options: any } ? ResolveSubCommands<T["options"]> 
+  : T extends { options: CommandOptions } ? ResolveSubCommands<T["options"]> 
   : never;
 
 type CommandArgsBase = {
@@ -205,5 +217,5 @@ function parseInteractionArg(data: CommandInteractionOption, args: CommandArgsBa
     }
 }
 
-export type { Command }
+export type { Command, CommandArgs, CommandOptions }
 export { CommandType, ArgType, ResolveCommandArgs, CommandArgsBase, parseInteractionOptions }
