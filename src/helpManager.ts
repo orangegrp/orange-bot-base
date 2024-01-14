@@ -6,7 +6,7 @@ import { CommandWithExecutor } from "./commandManager.js";
 
 const helpCommand = {
     name: "help",
-    description: "help",
+    description: "Displays command help",
     args: {
         command: {
             type: ArgType.STRING,
@@ -90,11 +90,12 @@ class HelpManager {
         const embed = new EmbedBuilder();
         embed.setTitle(`${this.getCommandMention(command)} help`);
 
-        let description = "usage: \n";
+        let description = "usage: \n\n";
 
         if (command.args) {
             description += `${this.getCommandMention(command)} ${this.getCommandArgHelpInline(command.args)}`;
             description += this.getCommandArgDescription(command.args);
+            description += command.description + "\n";
         }
         if (command.options) {
             description += `${this.getCommandOptionHelp(command.name, command.id, command.options)}`;
@@ -111,10 +112,11 @@ class HelpManager {
             if ("options" in option)
                 out += this.getCommandOptionHelp(`${prefix} ${name}`, id, option.options);
             else
-                out += id ? `</${prefix} ${name}:${id}>` : `${prefix} ${name}`
+                out += id ? `</${prefix} ${name}:${id}> ` : `${prefix} ${name} `
             if ("args" in option) {
                 out += this.getCommandArgHelpInline(option.args);
                 out += this.getCommandArgDescription(option.args);
+                out += option.description + "\n\n";
             }
         }
         return out;
