@@ -1,8 +1,38 @@
-import type { Message, TextBasedChannel } from "discord.js";
+import { EmbedBuilder, MessagePayload, type Message, type TextBasedChannel, InteractionReplyOptions, Snowflake } from "discord.js";
 import type { Bot } from "./bot.js"
+import { ArgType, Command, CommandArgs, CommandOptions } from "./command.js";
+import { CommandWithExecutor } from "./commandManager.js";
 
+
+const helpCommand = {
+    name: "help",
+    description: "help",
+    args: {
+        command: {
+            type: ArgType.STRING,
+            description: "Command to get help for",
+            required: false,
+            //choices: [
+            //    { name: "help", value: "help" }
+            //]
+        }
+    }
+} satisfies Command
 
 const NO_HELP = "No help exists for this command. :("
+
+
+const argNames: { [T in keyof ArgType as ArgType]: string } = {
+    3: "string",
+    4: "integer",
+    5: "boolean",
+    6: "user",
+    7: "channel",
+    8: "role",
+    9: "mentionable",
+    10: "number",
+    11: "attachment"
+}
 
 class HelpManager {
     private readonly bot: Bot;
@@ -25,7 +55,94 @@ class HelpManager {
             ], 
             helpText: "displays help"
         })
+
+        //helpCommand.args.command.choices.push(...Array.from(this.bot.commandManager.commands.keys()).map(name => ({ name: name, value: name })));
+        
+        this.bot.addCommand(helpCommand, (interaction, args) => {
+            if (args.command) {
+                interaction.reply(this.getCommandHelp(args.command));
+            }
+            else {
+                interaction.reply(this.getHelp());
+            }
+        })
     }
+    getHelp(): InteractionReplyOptions {
+        const embed = new EmbedBuilder();
+        embed.setTitle("help");
+
+        for (const [name, command] of this.bot.commandManager.commands) {
+            embed.addFields({ name: this.getCommandMention(command), value: command.description });
+        }
+        
+        return { embeds: [embed] };
+    }
+    getCommandHelp(commandName: string): InteractionReplyOptions {
+        const command = this.bot.commandManager.commands.get(commandName);
+
+        if (!command) {
+            const embed = new EmbedBuilder();
+            embed.setTitle("Command not found.");
+            embed.setDescription(`Command ${commandName} not found.`);
+            return { embeds: [embed] };
+        }
+
+        const embed = new EmbedBuilder();
+        embed.setTitle(`${this.getCommandMention(command)} help`);
+
+        let description = "usage: \n";
+
+        if (command.args) {
+            description += `${this.getCommandMention(command)} ${this.getCommandArgHelpInline(command.args)}`;
+            description += this.getCommandArgDescription(command.args);
+        }
+        if (command.options) {
+            description += `${this.getCommandOptionHelp(command.name, command.id, command.options)}`;
+        }
+
+        embed.setDescription(description);
+        
+        return { embeds: [embed] };
+    }
+    private getCommandOptionHelp(prefix: string, id: Snowflake | undefined, options: CommandOptions) {
+        let out = "";
+        for (const name in options) {
+            const option = options[name];
+            if ("options" in option)
+                out += this.getCommandOptionHelp(`${prefix} ${name}`, id, option.options);
+            else
+                out += id ? `</${prefix} ${name}:${id}>` : `${prefix} ${name}`
+            if ("args" in option) {
+                out += this.getCommandArgHelpInline(option.args);
+                out += this.getCommandArgDescription(option.args);
+            }
+        }
+        return out;
+    }
+    private getCommandArgHelpInline(args: CommandArgs) {
+        let out = "";
+        for (const name in args) {
+            const arg = args[name];
+            out += arg.required ? `<${name}>` : `[${name}]`;
+            out += " ";
+        }
+        return out + "\n";
+    }
+    private getCommandArgDescription(args: CommandArgs) {
+        let out = "";
+        for (const name in args) {
+            const arg = args[name];
+            out += "\u2800\u2800";
+            out += arg.required ? `<${name}>` : `[${name}]`;
+            out += `: (${argNames[arg.type]}) ${arg.description}`
+            out += "\n";
+        }
+        return out + "\n";
+    }
+    private getCommandMention(command: CommandWithExecutor<any>) {
+        return command.id ? `</${command.name}:${command.id}>` : `/${command.name}`;
+    }
+
     addHelpEntry(command: string, helpEntry: HelpEntry) {
         this.helpEntries[command] = helpEntry;
     }

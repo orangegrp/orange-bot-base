@@ -22,8 +22,8 @@ class Bot {
         this.client = client;
         this.prefix = prefix;
         this.token = token;
-        this.helpManager = new HelpManager(this);
         this.commandManager = new CommandManager(this);
+        this.helpManager = new HelpManager(this);
         this.fetcher = new Fetcher(this.client);
         client.on("messageCreate", msg => {
             if (!msg.content.startsWith(this.prefix)) return;
@@ -69,17 +69,20 @@ class Bot {
         this.client.login(this.token);
     }
     private onLoggedIn() {
+        const deployer = new CommandDeployer(this, this.token);
+
+        const guildId = process.env.DEPLOY_GUILD;
+        const global = process.env.DEPLOY_GLOBAL == "true";
+
         if (process.env.DEPLOY_COMMANDS == "true") {
-            const deployer = new CommandDeployer(this, this.token);
-
-            const guildId = process.env.DEPLOY_GUILD;
-            const global = process.env.DEPLOY_GLOBAL == "true";
-
             if (!guildId && !global) {
                 logger.warn("Not deploying commands, \"DEPLOY_GUILD\" and \"DEPLOY_GLOBAL\" are not set.")
                 return;
             }
             deployer.deploy(guildId);
+        }
+        else {
+            deployer.validate(guildId);
         }
     }
 }
