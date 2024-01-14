@@ -53,10 +53,12 @@ type CommandArg = {
     type: ArgType.STRING | ArgType.INTEGER | ArgType.NUMBER;
 })
 type SubCommandGroup = {
+    description: string;
     required?: boolean;
     options: { [name: string]: SubCommand };
 }
 type SubCommand = {
+    description: string;
     required?: boolean;
     args: CommandArgs;
 }
