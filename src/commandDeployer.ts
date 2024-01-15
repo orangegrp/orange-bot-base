@@ -112,7 +112,7 @@ class CommandDeployer {
 
     private mapCommandArgs(args: CommandArgs): Exclude<ApplicationCommandOption, ApplicationCommandSubGroup | ApplicationCommandSubCommand>[] {
         const argsDc: Exclude<ApplicationCommandOption, ApplicationCommandSubGroup | ApplicationCommandSubCommand>[] = [];
-
+        // show volk
         for (const name in args) {
             const arg = args[name];
 
