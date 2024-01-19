@@ -47,7 +47,7 @@ class CommandDeployer {
         const toDeploy = await this.validate(guildId);
 
         if (toDeploy.length == 0) {
-            logger.info("All command up to date. Nothing to deploy.");
+            logger.info("All commands are up to date. Nothing to deploy.");
             return;
         }
 
