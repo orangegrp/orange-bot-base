@@ -90,8 +90,11 @@ type Command = {
     /**
      * Command description
      */
-    description: string
-
+    description: string,
+    /**
+     * Set to true to bypass automatically wrapping the command executor in a try-catch
+     */
+    dontWrap?: boolean
 } & (
     {
         /**
