@@ -2,24 +2,27 @@ import type discord from "discord.js"
 import HelpManager from "./helpManager.js";
 import { loadModules } from "./moduleLoader.js";
 import { Fetcher } from "./fetcher.js"
-import type { PermissionResolvable, Snowflake } from "discord.js";
+import type { CacheType, CommandInteraction, PermissionResolvable, Snowflake } from "discord.js";
 import { type CommandExecutor, CommandManager } from "./commandManager.js";
 import { type Command } from "./command.js";
 import { CommandDeployer } from "./commandDeployer.js";
-import { getLogger } from "orange-common-lib";
+import { type Logger, getLogger } from "orange-common-lib";
+import replyError from "./helpers/replyError.js";
 
 const logger = getLogger("main");
 
 class Bot {
     readonly client: discord.Client;
+    readonly instanceName: string;
     readonly prefix: string;
     readonly helpManager: HelpManager;
     readonly commandManager: CommandManager;
     readonly fetcher: Fetcher;
     private chatCommands: { [i: string]: ChatCommand } = {}
     private readonly token: string;
-    constructor(client: discord.Client, prefix: string, token: string) {
+    constructor(client: discord.Client, instanceName: string, prefix: string, token: string) {
         this.client = client;
+        this.instanceName = instanceName;
         this.prefix = prefix;
         this.token = token;
         this.commandManager = new CommandManager(this);
@@ -67,6 +70,16 @@ class Bot {
     }
     login() {
         this.client.login(this.token);
+    }
+    /**
+     * Replies to an interaction with an error message
+     * @param interaction interaction to reply to
+     * @param message message to send
+     * @param logger logger to log error and id to (if defined)
+     * @returns event id
+     */
+    replyWithError(interaction: CommandInteraction<CacheType>, message: string, logger?: Logger) {
+        return replyError(this, interaction, message, logger);
     }
     private onLoggedIn() {
         const deployer = new CommandDeployer(this, this.token);
