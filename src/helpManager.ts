@@ -49,11 +49,11 @@ class HelpManager {
                 { 
                     name: "command",
                     type: "string",
-                    description: "command to get help for",
+                    description: "Command to get help for",
                     required: false
                 }
             ], 
-            helpText: "displays help"
+            helpText: "Displays help"
         })
 
         //helpCommand.args.command.choices.push(...Array.from(this.bot.commandManager.commands.keys()).map(name => ({ name: name, value: name })));
