@@ -90,7 +90,7 @@ class HelpManager {
         const embed = new EmbedBuilder();
         embed.setTitle(`${this.getCommandMention(command)} help`);
 
-        let description = "usage: \n\n";
+        let description = "Usage: \n\n";
 
         if (command.args) {
             description += `${this.getCommandMention(command)} ${this.getCommandArgHelpInline(command.args)}`;
