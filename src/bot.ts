@@ -2,7 +2,7 @@ import type discord from "discord.js"
 import HelpManager from "./helpManager.js";
 import { loadModules } from "./moduleLoader.js";
 import { Fetcher } from "./fetcher.js"
-import type { CacheType, CommandInteraction, PermissionResolvable, Snowflake } from "discord.js";
+import { CacheType, CommandInteraction, InteractionReplyOptions, Message, MessageReplyOptions, PermissionResolvable, RepliableInteraction, Snowflake } from "discord.js";
 import { type CommandExecutor, CommandManager } from "./commandManager.js";
 import { type Command } from "./command.js";
 import { CommandDeployer } from "./commandDeployer.js";
@@ -80,6 +80,13 @@ class Bot {
      */
     replyWithError(interaction: CommandInteraction<CacheType>, message: string, logger?: Logger) {
         return replyError(this, interaction, message, logger);
+    }
+    async noPingReply(to: Message, opts: MessageReplyOptions): Promise<void>;
+    async noPingReply(to: RepliableInteraction, opts: InteractionReplyOptions): Promise<void>;
+    async noPingReply(to: RepliableInteraction | Message, opts: InteractionReplyOptions | MessageReplyOptions): Promise<void> {
+        opts.allowedMentions = { repliedUser: false, users: [], roles: [] };
+        //@ts-expect-error
+        to.reply(opts);
     }
     private onLoggedIn() {
         const deployer = new CommandDeployer(this, this.token);
