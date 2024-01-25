@@ -269,7 +269,20 @@ function validateArgs(args: CommandArgs, options: readonly ApplicationCommandOpt
             if (arg.autocomplete !== argDc.autocomplete) return false;
             if (arg.min_length !== argDc.minLength) return false;
             if (arg.max_lenght !== argDc.maxLength) return false;
-            if (!argDc.autocomplete && arg.choices !== argDc.choices) return false;
+            if (!argDc.autocomplete) {
+                // if one is defined and the other isn't
+                if (!arg.choices) return !argDc.choices;
+                if (!argDc.choices) return false;
+
+                const count = Math.max(arg.choices.length, argDc.choices.length);
+                for (let i = 0; i < count; i++) {
+                    const choice = arg.choices[i];
+                    const choiceDc = argDc.choices[i];
+                    if (!choice || !choiceDc) return false;
+                    if (choice.name != choiceDc.name) return false;
+                    if (choice.value != choiceDc.value) return false;
+                }
+            }
         }
         else if (arg.type == ArgType.INTEGER && argDc.type == ApplicationCommandOptionType.Integer ||
                  arg.type == ArgType.NUMBER && argDc.type == ApplicationCommandOptionType.Number) {
