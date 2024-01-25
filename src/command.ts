@@ -125,6 +125,10 @@ type RoleArg = {
     role?: Role | APIRole | null,
     id: Snowflake
 }
+type AttachmentArg = {
+    attachment?: Attachment,
+    id: Snowflake
+}
 type MentionableArg = UserArg | ChannelArg;
 
 
@@ -137,6 +141,7 @@ type ResolveType<T> =
   : T extends ArgType.ROLE        ? RoleArg
   : T extends ArgType.MENTIONABLE ? MentionableArg
   : T extends ArgType.NUMBER      ? number
+  : T extends ArgType.ATTACHMENT  ? AttachmentArg
   : any;
 
 type ResolveRequired<T extends any, R extends boolean | undefined> = R extends true ? T : T | undefined;
@@ -212,6 +217,10 @@ function parseInteractionArg(data: CommandInteractionOption, args: CommandArgsBa
         case ApplicationCommandOptionType.Mentionable:
             if (typeof(data.value) != "string") throw new TypeError("Data of type mentionable is not a mentionable id");
             args[data.name] = { channel: data.channel, user: data.user, member: data.member, id: data.value } satisfies MentionableArg
+            break;
+        case ApplicationCommandOptionType.Attachment:
+            if (typeof(data.value) != "string") throw new TypeError("Data of type attachment is not an attachment id");
+            args[data.name] = { attachment: data.attachment, id: data.value } satisfies AttachmentArg;
             break;
         default:
             args[data.name] = data.value;
