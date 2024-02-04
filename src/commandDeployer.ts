@@ -287,7 +287,10 @@ function validateArgs(args: CommandArgs, options: readonly ApplicationCommandOpt
             if (arg.max_lenght !== argDc.maxLength) return false;
             if (!argDc.autocomplete) {
                 // if one is defined and the other isn't
-                if (!arg.choices) return !argDc.choices;
+                if (!arg.choices) {
+                    if (!argDc.choices) continue;
+                    return false;
+                }
                 if (!argDc.choices) return false;
 
                 const count = Math.max(arg.choices.length, argDc.choices.length);
