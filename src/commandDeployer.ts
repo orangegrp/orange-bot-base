@@ -3,6 +3,8 @@ import type { Permissions, LocaleString, Snowflake, ApplicationCommandOption, Ap
 import { ArgType, CommandArgs, CommandOptions, CommandType } from "./command.js";
 import { getLogger } from "orange-common-lib";
 import type { Bot } from "./bot";
+import util from "util";
+import chalk from "chalk";
 
 const logger = getLogger("commandDeployer");
 
@@ -171,13 +173,19 @@ class CommandDeployer {
             guildId ? Routes.applicationGuildCommands(this.userId, guildId) 
                     : Routes.applicationCommands(this.userId)) as DiscordCommandFull[];
         
+        logger.log(`Found ${data.length} commands on discord side`);
+
         const commands = Object.fromEntries(data.map(cmd => [cmd.name, cmd]));
 
+        logger.log(`Found ${Object.keys(commands).length} commands on local side`);
+
+       
         const toDeploy: string[] = [];
 
         // loop thru all commands in commandManager
         for (const [name, command] of this.bot.commandManager.commands) {
             if (!(name in commands)) {
+                logger.log(`Command ${name} is not on discord side`);
                 // command doesn't exist on discords side
                 toDeploy.push(name);
                 continue;
@@ -187,15 +195,19 @@ class CommandDeployer {
             const discordCommand = commands[name];
             if (command.args) {
                 if (!discordCommand.options || !validateArgs(command.args, discordCommand.options)) {
+                    logger.log(`Command ${name} has invalid arguments. Will update ...`);
                     toDeploy.push(name);
                     continue;
                 }
+                logger.log(`Command ${name} has valid arguments`);
             }
             if (command.options) {
                 if (!discordCommand.options || !validateOptions(command.options, discordCommand.options)) {
+                    logger.log(`Command ${name} has invalid options. Will update ...`);
                     toDeploy.push(name);
                     continue;
                 }
+                logger.log(`Command ${name} has valid options`);
             }
         }
         return toDeploy;
@@ -213,6 +225,8 @@ function validateOptions(options: CommandOptions, discordOptions: readonly Appli
     if (discordOptions.some(opt => !(opt.name in options))) return false;
 
     const optionsDc = Object.fromEntries(discordOptions.map(option => [option.name, option]));
+
+    logger.verbose(`${chalk.white("Local options:")} ${util.inspect(options, { depth: null })}\t${chalk.white("Discord options:")} ${util.inspect(optionsDc, { depth: null  })}`);
 
     for (const optName in options) {
         if (!(optName in optionsDc)) return false;
@@ -244,6 +258,8 @@ function validateArgs(args: CommandArgs, options: readonly ApplicationCommandOpt
     if (options.some(arg => !(arg.name in args))) return false;
 
     const argsDc = Object.fromEntries(options.map(option => [option.name, option]));
+
+    logger.verbose(`${chalk.white("Local args:")} ${util.inspect(args, { depth: null })}\t${chalk.white("Discord args:")} ${util.inspect(argsDc, { depth: null })}`);
 
     for (const argName in args) {
         // if arg doesn't exist on discord
