@@ -19,7 +19,7 @@ const key = readFileSync("./certs/orange-bot.key");
 const clientCert = readFileSync("./certs/orange-bot-client.crt");
 const clientKey = readFileSync("./certs/orange-bot-client.key");
 
-const P2P_SYNC_PORT = Number.parseInt(process.env.P2P_SYNC_PORT || "4000");
+const P2P_SYNC_PORT = Number.parseInt(process.env.P2P_SYNC_PORT || "0");
 const P2P_PRIORITY = Number.parseInt(process.env.P2P_PRIORITY || "0");
 const P2P_MY_ADDRESS = process.env.P2P_MY_ADDRESS;
 const PEER_RETRY_TIME = 60000; // how long to wait before retrying connections to other peers (after they all failed)
