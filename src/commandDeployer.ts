@@ -173,11 +173,11 @@ class CommandDeployer {
             guildId ? Routes.applicationGuildCommands(this.userId, guildId) 
                     : Routes.applicationCommands(this.userId)) as DiscordCommandFull[];
         
-        logger.log(`Found ${data.length} commands on discord side`);
+        //logger.log(`Found ${data.length} commands on discord side`);
 
         const commands = Object.fromEntries(data.map(cmd => [cmd.name, cmd]));
 
-        logger.log(`Found ${Object.keys(commands).length} commands on local side`);
+        //logger.log(`Found ${Object.keys(commands).length} commands on local side`);
 
        
         const toDeploy: string[] = [];
@@ -226,7 +226,7 @@ function validateOptions(options: CommandOptions, discordOptions: readonly Appli
 
     const optionsDc = Object.fromEntries(discordOptions.map(option => [option.name, option]));
 
-    logger.verbose(`${chalk.white("Local options:")} ${util.inspect(options, { depth: null })}\t${chalk.white("Discord options:")} ${util.inspect(optionsDc, { depth: null  })}`);
+    //logger.verbose(`${chalk.white("Local options:")} ${util.inspect(options, { depth: null })}\t${chalk.white("Discord options:")} ${util.inspect(optionsDc, { depth: null  })}`);
 
     for (const optName in options) {
         if (!(optName in optionsDc)) return false;
@@ -259,7 +259,7 @@ function validateArgs(args: CommandArgs, options: readonly ApplicationCommandOpt
 
     const argsDc = Object.fromEntries(options.map(option => [option.name, option]));
 
-    logger.verbose(`${chalk.white("Local args:")} ${util.inspect(args, { depth: null })}\t${chalk.white("Discord args:")} ${util.inspect(argsDc, { depth: null })}`);
+    //logger.verbose(`${chalk.white("Local args:")} ${util.inspect(args, { depth: null })}\t${chalk.white("Discord args:")} ${util.inspect(argsDc, { depth: null })}`);
 
     for (const argName in args) {
         // if arg doesn't exist on discord
