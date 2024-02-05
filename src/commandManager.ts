@@ -9,13 +9,17 @@ type CommandExecutor<T extends Command> = (interaction: ChatInputCommandInteract
 type CommandWithExecutor<T extends Command> = Command & {
     executor: CommandExecutor<T>;
     id?: Snowflake;
+    unavailable?: true;
+    handling?: boolean;
 }
 
 class CommandManager {
     private readonly bot: Bot;
     private readonly logger: Logger;
     readonly commands: Map<string, CommandWithExecutor<any>>;
+    handleAll: boolean;
     constructor(bot: Bot) {
+        this.handleAll = true;
         this.bot = bot;
         this.commands = new Map();
         this.logger = getLogger("commandManager");
@@ -37,7 +41,8 @@ class CommandManager {
 
         const args = parseInteractionOptions(interaction.options.data);
 
-        command.executor(interaction, args);
+        // TODO: handle commands from other instances in case they die
+        if (this.handleAll || command.handling) command.executor(interaction, args);
     }
     private wrapExecutor<T extends Command>(commandName: string, executor: CommandExecutor<T>): CommandExecutor<T> {
         return async (interaction, args) => {
