@@ -8,21 +8,29 @@ import { type Command } from "./command.js";
 import { CommandDeployer } from "./commandDeployer.js";
 import { type Logger, getLogger } from "orange-common-lib";
 import replyError from "./helpers/replyError.js";
+import { SyncHandler } from "./syncHandler.js";
 
 const logger = getLogger("main");
 
 class Bot {
     readonly client: discord.Client;
     readonly instanceName: string;
+    readonly version: string;
+    readonly env: "prod" | "dev";
     readonly prefix: string;
     readonly helpManager: HelpManager;
     readonly commandManager: CommandManager;
     readonly fetcher: Fetcher;
     private chatCommands: { [i: string]: ChatCommand } = {}
     private readonly token: string;
-    constructor(client: discord.Client, instanceName: string, prefix: string, token: string) {
+    constructor(client: discord.Client, instanceName: string, version: string, prefix: string, token: string) {
         this.client = client;
         this.instanceName = instanceName;
+        this.version = version;
+        if (process.env.NODE_ENV !== "production" && process.env.NODE_ENV !== "development") {
+            logger.warn(`"NODE_ENV" is not "production" or "development", assuming "development"`);
+        }
+        this.env = process.env.NODE_ENV == "production" ? "prod" : "dev";
         this.prefix = prefix;
         this.token = token;
         this.commandManager = new CommandManager(this);
@@ -58,6 +66,8 @@ class Bot {
      */
     async loadModules(moduleDir: string) {
         await loadModules(this, moduleDir);
+
+        if (process.env.ENABLE_SYNC) new SyncHandler(this);
     }
     getUser(id: Snowflake) {
         return this.fetcher.getUser(id);
