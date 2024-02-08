@@ -1,10 +1,12 @@
 class CachedLookup<K, V> {
     readonly cache: Map<K, V>;
     private readonly fetcher: (key: K) => Promise<V>;
-    constructor(fetcher: (key: K) => Promise<V>, expireEveryMs: number = 86400000) {
+    constructor(fetcher: (key: K) => Promise<V>, expireEveryMs?: number) {
         this.cache = new Map();
         this.fetcher = fetcher;
-        setInterval(() => this.cache.clear(), expireEveryMs);
+
+        if (expireEveryMs !== undefined)
+            setInterval(() => this.cache.clear(), expireEveryMs);
     }
     async get(key: K): Promise<V | undefined> {
         if (this.cache.has(key)) return this.cache.get(key);
