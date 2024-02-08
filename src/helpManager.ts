@@ -115,7 +115,7 @@ class HelpManager {
             if ("options" in option)
                 out += this.getCommandOptionHelp(`${prefix} ${name}`, id, option.options);
             else
-                out += id ? `</${prefix} ${name}:${id}> ` : `${prefix} ${name} `
+                out += id ? `\n</${prefix} ${name}:${id}> ` : `${prefix} ${name} `
             if ("args" in option) {
                 out += this.getCommandArgHelpInline(option.args);
                 out += this.getCommandArgDescription(option.args);
