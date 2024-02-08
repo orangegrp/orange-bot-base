@@ -98,7 +98,7 @@ class HelpManager {
             description += command.description + "\n";
         }
         if (command.options) {
-            description += `${this.getCommandOptionHelp(command.name, command.id, command.options)}`;
+            description += `\n${this.getCommandOptionHelp(command.name, command.id, command.options)}`;
         }
         if (command.notes) {
             description += `### Notes: \n${command.notes}\n`;
@@ -119,7 +119,7 @@ class HelpManager {
             if ("args" in option) {
                 out += this.getCommandArgHelpInline(option.args);
                 out += this.getCommandArgDescription(option.args);
-                out += option.description + "\n\n";
+                out += option.description + "\n";
             }
         }
         return out;
