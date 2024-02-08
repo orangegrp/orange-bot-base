@@ -92,6 +92,10 @@ type Command = {
      */
     description: string,
     /**
+     * Command notes (only shows up in command help)
+     */
+    notes?: string,
+    /**
      * Set to true to bypass automatically wrapping the command executor in a try-catch
      */
     dontWrap?: boolean
