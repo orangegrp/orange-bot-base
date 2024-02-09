@@ -3,6 +3,7 @@ import { Events, DiscordAPIError, DiscordjsError } from "discord.js";
 import type { ChatInputCommandInteraction, Interaction, Snowflake } from "discord.js";
 import { type Command, parseInteractionOptions } from "./command.js";
 import { getLogger, type Logger } from "orange-common-lib";
+import { DisplayError } from "./helpers/displayError.js";
 
 type CommandExecutor<T extends Command> = (interaction: ChatInputCommandInteraction, args: ResolveCommandArgs<T>) => Promise<void> | void
 
@@ -50,6 +51,14 @@ class CommandManager {
                 await executor(interaction, args);
             }
             catch (e: any) {
+                const display = e instanceof DisplayError;
+
+                const msg = display ? e.message : "An unknown error has occurred while running this command.";
+
+                if (display && (e as DisplayError).original) {
+                    e = (e as DisplayError).original;
+                }
+
                 this.logger.error(`Caught an error with command ${commandName}:`);
                 this.logger.error(e as any);
                 this.logger.error(`Interaction:`);
@@ -60,7 +69,7 @@ class CommandManager {
                     this.logger.warn("Cannot respond to the command with an error since this was an error with the interaction.");
                     return;
                 }
-                await this.bot.replyWithError(interaction, "An unknown error has occurred while running this command.", this.logger);
+                await this.bot.replyWithError(interaction, msg, this.logger);
             }
         }
     }
