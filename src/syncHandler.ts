@@ -1,5 +1,3 @@
-// @ts nocheck
-// TODO: remember to remove this
 import { WebSocketServer, WebSocket, RawData } from "ws";
 import { readFileSync } from "fs";
 import https from "https";
@@ -12,12 +10,6 @@ import mapOperations from "./helpers/mapOperations.js";
 import { CommandWithExecutor } from "./commandManager.js";
 
 const DATA_PATH = "./config/SyncHandler/p2p-config.json";
-
-const caCert = readFileSync("./certs/ca.crt");
-const cert = readFileSync("./certs/orange-bot.crt");
-const key = readFileSync("./certs/orange-bot.key");
-const clientCert = readFileSync("./certs/orange-bot-client.crt");
-const clientKey = readFileSync("./certs/orange-bot-client.key");
 
 const P2P_SYNC_PORT = Number.parseInt(process.env.P2P_SYNC_PORT || "0");
 const P2P_PRIORITY = Number.parseInt(process.env.P2P_PRIORITY || "0");
@@ -141,12 +133,16 @@ class SyncHandler {
     private readonly myself: Peer;
     private readonly server;
     private preferredCommands?: string[];
+    readonly certs;
 
     private currentMessageId = 1;
 
     constructor(bot: Bot) {
         this.bot = bot;
         this.logger = getLogger("SyncHandler");
+
+        this.certs = loadCerts();
+
         this.peers = new Map();
         this.storage = new JsonDataStorage(DATA_PATH, p2pConfigSchema, this.logger);
         this.client = new SyncHandlerClient(this, this.logger);
@@ -163,9 +159,9 @@ class SyncHandler {
         }
 
         this.server = https.createServer({
-            cert: cert,
-            key: key,
-            ca: caCert,
+            cert: this.certs.cert,
+            key: this.certs.key,
+            ca: this.certs.caCert,
             requestCert: true
         });
 
@@ -668,9 +664,9 @@ class SyncHandlerClient {
 
         this.ws = new WebSocket(`wss://${peer.address}`, { 
             hostname: "orange-bot",
-            ca: caCert,
-            cert: clientCert,
-            key: clientKey,
+            ca: this.syncHandler.certs.caCert,
+            cert: this.syncHandler.certs.clientCert,
+            key: this.syncHandler.certs.clientKey,
             rejectUnauthorized: true,
             timeout: 5000,
             checkServerIdentity: ((hostname: string, cert: PeerCertificate) => {
@@ -744,6 +740,19 @@ class SyncHandlerClient {
             version: this.bot.version,
             env: this.bot.env
         });
+    }
+}
+
+
+function loadCerts() {
+    const caCert = readFileSync("./certs/ca.crt");
+    const cert = readFileSync("./certs/orange-bot.crt");
+    const key = readFileSync("./certs/orange-bot.key");
+    const clientCert = readFileSync("./certs/orange-bot-client.crt");
+    const clientKey = readFileSync("./certs/orange-bot-client.key");
+
+    return {
+        caCert, cert, key, clientCert, clientKey
     }
 }
 
