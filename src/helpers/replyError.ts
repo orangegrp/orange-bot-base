@@ -14,22 +14,28 @@ import { randomBytes } from "crypto";
 async function replyError(bot: Bot, interaction: CommandInteraction<CacheType>, message: string, logger?: Logger) {
     const eventId = randomBytes(8).toString('hex');
 
-    await replyOrEdit(interaction, {embeds: [{
-        title: ":x: Error",
-        description: message,
-        timestamp: new Date().toISOString(),
-        fields: [
-            { name: "Bot instance", value: bot.instanceName, inline: true },
-            { name: "Event id", value: eventId, inline: true }
-        ],
-        color: 0xe73131
-    }]});
+    try {
+        await replyOrEdit(interaction, {embeds: [{
+            title: ":x: Error",
+            description: message,
+            timestamp: new Date().toISOString(),
+            fields: [
+                { name: "Bot instance", value: bot.instanceName, inline: true },
+                { name: "Event id", value: eventId, inline: true }
+            ],
+            color: 0xe73131
+        }]});
 
-    logger && logger.info(`Sent error: "${message}" to discord. (event id ${eventId})`);
+        logger && logger.info(`Sent error: "${message}" to discord. (event id ${eventId})`);
+    }
+    catch (e) {
+        logger && logger.info(`Failed to send error: "${message}" to discord. (event id ${eventId})`);
+        logger && logger.error(e as any);
+    }
     return eventId;
 }
 async function replyOrEdit(interaction: CommandInteraction<CacheType>, opts: InteractionReplyOptions & InteractionEditReplyOptions) {
-    interaction.replied ? await interaction.editReply(opts) : await interaction.reply(opts);
+    (interaction.replied || interaction.deferred) ? await interaction.editReply(opts) : await interaction.reply(opts);
 }
 
 export default replyError;
