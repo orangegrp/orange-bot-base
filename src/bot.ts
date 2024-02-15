@@ -1,6 +1,6 @@
 import type discord from "discord.js"
 import HelpManager from "./helpManager.js";
-import { loadModules } from "./moduleLoader.js";
+import moduleLoader from "./moduleLoader.js";
 import { Fetcher } from "./fetcher.js"
 import { CacheType, CommandInteraction, InteractionReplyOptions, Message, MessageReplyOptions, PermissionResolvable, RepliableInteraction, Snowflake } from "discord.js";
 import { type CommandExecutor, CommandManager } from "./commandManager.js";
@@ -9,6 +9,7 @@ import { CommandDeployer } from "./commandDeployer.js";
 import { type Logger, getLogger } from "orange-common-lib";
 import replyError from "./helpers/replyError.js";
 import { SyncHandler } from "./syncHandler.js";
+import sleep from "./helpers/sleep.js";
 
 const logger = getLogger("main");
 
@@ -65,7 +66,7 @@ class Bot {
      * @param moduleDir Directory in which to look for module files
      */
     async loadModules(moduleDir: string) {
-        await loadModules(this, moduleDir);
+        await moduleLoader.load(this, moduleDir);
 
         if (process.env.ENABLE_SYNC) new SyncHandler(this);
     }
@@ -98,7 +99,9 @@ class Bot {
         //@ts-expect-error
         to.reply(opts);
     }
-    private onLoggedIn() {
+    private async onLoggedIn() {
+        await moduleLoader.done();
+
         const deployer = new CommandDeployer(this, this.token);
 
         const guildId = process.env.DEPLOY_GUILD;

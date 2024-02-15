@@ -5,6 +5,9 @@ import { join } from "path"
 import chalk from "chalk";
 const logger = getLogger("moduleLoader");
 
+var done = false;
+const waiters: (() => void)[] = []
+
 async function loadModules(bot: import("./bot.js").Bot, moduleDir: string) {
     logger.log(chalk.blue("Loading modules..."));
 
@@ -26,8 +29,17 @@ async function loadModules(bot: import("./bot.js").Bot, moduleDir: string) {
             logger.error(`Unknown error loading module ${chalk.white(fileName)}.`);
         }
     }
-    logger.ok("Done loading modules.")
+    logger.ok("Done loading modules.");
+    done = true;
+
+    for (const waiter of waiters) {
+        waiter();
+    }
 }
 
+async function awaitDone() {
+    if (done) return;
+    return new Promise<void>(resolve => { waiters.push(resolve) });
+}
 
-export { loadModules }
+export default { load: loadModules, done: awaitDone }
