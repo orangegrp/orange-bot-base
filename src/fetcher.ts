@@ -26,6 +26,10 @@ class Fetcher {
         const guild = await this.guildCache.get(guildId);
         return await guild?.getMember(userId);
     }
+    async getChannel(guildId: Snowflake, userId: Snowflake) {
+        const guild = await this.guildCache.get(guildId);
+        return await guild?.getChannel(userId);
+    }
 }
 
 export { Fetcher }
