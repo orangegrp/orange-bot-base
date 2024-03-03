@@ -9,6 +9,7 @@ import { CommandDeployer } from "./commandDeployer.js";
 import { type Logger, getLogger } from "orange-common-lib";
 import replyError from "./helpers/replyError.js";
 import { SyncHandler } from "./syncHandler.js";
+import { ConfigApi } from "./ConfigStorage/configApi.js";
 
 const logger = getLogger("main");
 
@@ -23,6 +24,7 @@ class Bot {
     readonly fetcher: Fetcher;
     private chatCommands: { [i: string]: ChatCommand } = {}
     private readonly token: string;
+    private _configApi?: ConfigApi;
     constructor(client: discord.Client, instanceName: string, version: string, prefix: string, token: string) {
         this.client = client;
         this.instanceName = instanceName;
@@ -114,6 +116,10 @@ class Bot {
         else {
             deployer.validate(guildId);
         }
+    }
+    get configApi() {
+        if (!this._configApi) this._configApi = new ConfigApi(this);
+        return this._configApi;
     }
 }
 type CommandOptions = { [i: string]: PermissionResolvable }
