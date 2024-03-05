@@ -148,6 +148,15 @@ async function setSettings(config: ConfigurableI<ConfigConfig, ConfigValueScope>
             addFail(valueName, ValueValidationResult.invalid_value);
             continue;
         }
+        const uiVisibility = config.values[valueName].uiVisibility;
+        if (uiVisibility === "readonly") {
+            addFail(valueName, ValueValidationResult.readonly_value);
+            continue;
+        }
+        if (uiVisibility === "hidden") {
+            addFail(valueName, ValueValidationResult.no_permission);
+            continue;
+        }
         if (user && user != "admin" && "hasPermission" in config && !await config.hasPermission(user, valueName)) {
             addFail(valueName, ValueValidationResult.no_permission);
             continue;
