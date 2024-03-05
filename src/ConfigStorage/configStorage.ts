@@ -150,7 +150,7 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
             case ConfigValueType.integer:
                 return typeof value === "number";
             default:
-                throw new Error(`Check for value of type ${valueOpts.type} not implemented`);
+                throw new Error(`Check for value of type "${valueOpts.type}" not implemented`);
         };
     }
     checkValue<K extends keyof Values>(key: K, value: RealValueTypeOf<Values[K]>) {
@@ -186,7 +186,7 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
                 if (valueOpts.maxValue !== undefined && (value as number) > valueOpts.maxValue) return false;
                 return true;
             default:
-                throw new Error(`Check for value of type ${valueOpts.type} not implemented`);
+                throw new Error(`Check for value of type "${valueOpts.type}" not implemented`);
         }
     }
 };
@@ -229,7 +229,7 @@ class _GuildConfigurable<Values extends ConfigValues<"guild">> extends _Configur
         if (!permissions) return true; // no permissions set
 
         this.guild = await this.bot.fetcher.getGuild(this.id);
-        if (!this.guild) throw new NamedError(`Guild with id ${this.id} not found!`, "GuildNotFoundError");
+        if (!this.guild) throw new NamedError(`Guild with id "${this.id}" not found!`, "GuildNotFoundError");
         
         const member = await this.guild.getMember(resolveUser(user));
         if (!member) throw new NamedError(`Couldn't find member "${user}" in "${this.guild.name}"`, "MemberNotFoundError");

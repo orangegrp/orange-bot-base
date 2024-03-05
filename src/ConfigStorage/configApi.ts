@@ -112,13 +112,13 @@ async function getUserSettings(configApi: ConfigApi, user: string) {
 
 async function setUserSettings(configApi: ConfigApi, module: string, user: string, edits: any) {
     const storage = configApi.storages.get(module);
-    if (!storage) return new ApiError(ApiErrorType.module_not_found, `Module ${module} doesn't exist`);
+    if (!storage) return new ApiError(ApiErrorType.module_not_found, `Module "${module}" doesn't exist`);
     return setSettings(storage.user(user) as any, edits);
 }
 
 async function setGuildSettings(configApi: ConfigApi, module: string, guild: string, user: string, edits: any) {
     const storage = configApi.storages.get(module);
-    if (!storage) return new ApiError(ApiErrorType.module_not_found, `Module ${module} doesn't exist`);
+    if (!storage) return new ApiError(ApiErrorType.module_not_found, `Module "${module}" doesn't exist`);
     return setSettings(storage.guild(guild) as any, edits, user);
 }
 
