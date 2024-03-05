@@ -15,7 +15,6 @@ import { ConfigConfig, ConfigValueScope, ConfigValueType, ConfigValues } from ".
 
 
 const PORT = parseInt(process.env.CONFIG_API_PORT || "0");
-if (PORT === 0) throw new Error(`env variable "CONFIG_API_PORT" is undefined or 0.`);
 
 const logger = getLogger("ConfigApi");
 
@@ -25,6 +24,8 @@ class ConfigApi {
     readonly fastify;
 
     constructor(readonly bot: Bot) {
+        if (PORT === 0) throw new Error(`env variable "CONFIG_API_PORT" is undefined or 0.`);
+        
         this.storages = new Map<string, ConfigStorage<ConfigConfig>>();
         this.fastify = Fastify({
             logger: true
