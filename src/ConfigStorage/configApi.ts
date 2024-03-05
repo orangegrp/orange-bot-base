@@ -172,7 +172,8 @@ async function getGuilds(configApi: ConfigApi, user: string) {
     const response: ApiGuild[] = [];
 
     const guilds = await asyncFilter(Array.from(configApi.bot.client.guilds.cache.values()), async guild => {
-        try { 
+        try {
+            if (user === "admin") return true;
             await guild.members.fetch(user);
             return true;
         }
@@ -183,7 +184,8 @@ async function getGuilds(configApi: ConfigApi, user: string) {
 
     for (const guild of guilds) {
         let permission = false;
-        for (const storage of configApi.storages.values()) {
+        if (user === "admin") permission = true;
+        else for (const storage of configApi.storages.values()) {
             const guildConfig = storage.guild(guild) as _GuildConfigurable<ConfigValues<"guild">>;
             if (await guildConfig.hasAnyPermission(user)) {
                 permission = true;
