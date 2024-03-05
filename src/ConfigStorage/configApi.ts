@@ -4,7 +4,10 @@ import { ApiError } from "./apiError.js";
 
 import type { UserResolvable } from "discord.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest, FastifyError } from "fastify";
-import { ApiErrorType, type ApiConfigValue, type ApiGuild, type SettingsList, ValueEditResult, ValueValidationResult, ValueValidationResults, ApiDiscordItem } from "./apiTypes.js";
+
+import type { ApiConfigValue, ApiGuild, SettingsList, ValueEditResult, ValueValidationResults, ApiDiscordUser, ApiDiscordChannel } from "orange-common-lib/dist/configApiTypes/api_v1.js";
+import { ValueValidationResult, ApiErrorType } from "orange-common-lib/dist/configApiTypes/api_v1.js";
+
 import type { ConfigStorage, ConfigurableI, _GuildConfigurable } from "./configStorage.js";
 import type { Bot } from "../bot.js";
 import { asyncFilter } from "../helpers/arrayHelpers.js";
@@ -211,12 +214,15 @@ async function getGuildSettings(configApi: ConfigApi, user: string, guild: strin
     return response;
 }
 
-function unknownApiDiscordItem(id: string): ApiDiscordItem {
+function unknownApiDiscordUser(id: string): ApiDiscordUser {
     return { id, name: "unknown", icon: null }
 }
+function unknownApiDiscordChannel(id: string): ApiDiscordChannel {
+    return { id, name: "unknown" }
+}
 
-async function filterConfigValues(config: ConfigurableI<ConfigConfig, ConfigValueScope>, user?: UserResolvable | "admin"): Promise<ApiConfigValue<ConfigValueType>[]> {
-    const output: ApiConfigValue<ConfigValueType>[] = [];
+async function filterConfigValues(config: ConfigurableI<ConfigConfig, ConfigValueScope>, user?: UserResolvable | "admin"): Promise<ApiConfigValue[]> {
+    const output: ApiConfigValue[] = [];
     const data = await config.getAll();
     let hasPerms = false;
 
@@ -229,24 +235,24 @@ async function filterConfigValues(config: ConfigurableI<ConfigConfig, ConfigValu
         if (data[key] === undefined || data[key] === null) value = null;
         else if (config.values[key].type == ConfigValueType.user) {
             const user = await config.bot.fetcher.getUser(data[key] as string);
-            if (!user) value = unknownApiDiscordItem(data[key] as string);
-            else value = { id: user.id, name: user.username, icon: user.user.avatarURL() } satisfies ApiDiscordItem;
+            if (!user) value = unknownApiDiscordUser(data[key] as string);
+            else value = { id: user.id, name: user.username, icon: user.user.avatarURL() } satisfies ApiDiscordUser;
         }
         else if (config.values[key].type == ConfigValueType.channel) {
-            if (!("guild" in config)) value = unknownApiDiscordItem(data[key] as string);
+            if (!("guild" in config)) value = unknownApiDiscordChannel(data[key] as string);
             const channel = await config.bot.fetcher.getChannel(config.id, data[key] as string);
-            if (!channel) value = unknownApiDiscordItem(data[key] as string);
-            else value = { id: channel.id, name: channel.name, icon: null } satisfies ApiDiscordItem;
+            if (!channel) value = unknownApiDiscordChannel(data[key] as string);
+            else value = { id: channel.id, name: channel.name } satisfies ApiDiscordChannel;
         }
         else if (config.values[key].type == ConfigValueType.member) {
-            if (!("guild" in config)) value = unknownApiDiscordItem(data[key] as string);
+            if (!("guild" in config)) value = unknownApiDiscordUser(data[key] as string);
             const member = await config.bot.fetcher.getMember(config.id, data[key] as string);
-            if (!member) value = unknownApiDiscordItem(data[key] as string);
-            else value = { id: member.id, name: member.member.user.username, icon: member.member.avatarURL() } satisfies ApiDiscordItem;
+            if (!member) value = unknownApiDiscordUser(data[key] as string);
+            else value = { id: member.id, name: member.member.user.username, icon: member.member.avatarURL() } satisfies ApiDiscordUser;
         }
         else value = data[key];
 
-        const outValue: ApiConfigValue<ConfigValueType> = Object.assign({}, { name: key, value: value as any }, valueSchema);
+        const outValue: ApiConfigValue = Object.assign({}, { name: key, value: value as any }, valueSchema);
 
         if (user && user !== "admin" && "hasPermission" in config) {
             if (await config.hasPermission(user, key)) hasPerms = true;

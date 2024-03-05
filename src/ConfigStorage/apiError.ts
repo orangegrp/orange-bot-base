@@ -1,5 +1,4 @@
-import type { ApiError as _ApiError } from "./apiTypes.js";
-import { ApiErrorType } from "./apiTypes.js";
+import { ApiErrorType, ApiError as _ApiError } from "orange-common-lib/dist/configApiTypes/api_v1.js";
 
 
 const apiStatusCodes: { [KEY in keyof typeof ApiErrorType]: number } = {
