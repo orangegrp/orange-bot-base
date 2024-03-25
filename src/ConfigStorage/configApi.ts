@@ -344,13 +344,13 @@ async function filterConfigValues(config: ConfigurableI<ConfigConfig, ConfigValu
             if (!("guild" in config)) value = unknownApiDiscordChannel(data[key] as string);
             const channel = await config.bot.fetcher.getChannel(config.id, data[key] as string);
             if (!channel) value = unknownApiDiscordChannel(data[key] as string);
-            else value = { id: channel.id, name: channel.name } satisfies ApiDiscordChannel;
+            else value = apiDiscordChannel(channel.channel);
         }
         else if (config.values[key].type == ConfigValueType.member) {
             if (!("guild" in config)) value = unknownApiDiscordUser(data[key] as string);
             const member = await config.bot.fetcher.getMember(config.id, data[key] as string);
             if (!member) value = unknownApiDiscordUser(data[key] as string);
-            else value = { id: member.id, name: member.member.user.username, icon: member.member.avatarURL() } satisfies ApiDiscordUser;
+            else value = apiDiscordMember(member.member);
         }
         else value = data[key];
 
