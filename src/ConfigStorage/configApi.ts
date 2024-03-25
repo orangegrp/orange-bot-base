@@ -308,11 +308,11 @@ function apiDiscordMember(member: GuildMember): ApiDiscordMember {
         globalName: member.user.globalName || member.user.displayName
     }
 }
-function apiDiscordChannel(channel: TextBasedGuildChannel): ApiDiscordChannel {
+function apiDiscordChannel(channel: GuildBasedChannel): ApiDiscordChannel {
     return {
         id: channel.id,
         name: channel.name,
-        type: channel.isThread() ? "thread" : channel.isVoiceBased() ? "voice" : "text"
+        type: channel.isThread() ? "thread" : channel.isVoiceBased() ? "voice" : channel.isTextBased() ? "text" : "unknown"
     }
 }
 
@@ -320,7 +320,7 @@ function unknownApiDiscordUser(id: string): ApiDiscordUser {
     return { id, name: "unknown", icon: null }
 }
 function unknownApiDiscordChannel(id: string): ApiDiscordChannel {
-    return { id, name: "unknown" }
+    return { id, name: "unknown", type: "unknown" }
 }
 
 async function filterConfigValues(config: ConfigurableI<ConfigConfig, ConfigValueScope>, user?: UserResolvable | "admin"): Promise<ApiConfigValue[]> {
