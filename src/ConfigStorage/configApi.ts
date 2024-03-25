@@ -2,16 +2,17 @@ import Fastify from "fastify";
 import { getLogger } from "orange-common-lib";
 import { ApiError } from "./apiError.js";
 
-import type { UserResolvable } from "discord.js";
+import type { GuildBasedChannel, GuildMember, TextBasedChannel, UserResolvable } from "discord.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest, FastifyError } from "fastify";
 
-import type { ApiConfigValue, ApiGuild, SettingsList, ValueEditResult, ValueValidationResults, ApiDiscordUser, ApiDiscordChannel } from "orange-common-lib/dist/configApiTypes/api_v1.js";
+import type { ApiConfigValue, ApiGuild, SettingsList, ValueEditResult, ValueValidationResults, ApiDiscordUser, ApiDiscordChannel, ApiDiscordMemberList, ApiDiscordMember, ApiDiscordChannelList } from "orange-common-lib/dist/configApiTypes/api_v1.js";
 import { ValueValidationResult, ApiErrorType } from "orange-common-lib/dist/configApiTypes/api_v1.js";
 
 import type { ConfigStorage, ConfigurableI, _GuildConfigurable } from "./configStorage.js";
 import type { Bot } from "../bot.js";
 import { asyncFilter } from "../helpers/arrayHelpers.js";
 import { ConfigConfig, ConfigValueScope, ConfigValueType, ConfigValues } from "./types.js";
+import { GuildChannel } from "../wrappers/channel.js";
 
 
 const PORT = parseInt(process.env.CONFIG_API_PORT || "0");
@@ -72,6 +73,9 @@ function bindRoutes(configApi: ConfigApi, fastify: FastifyInstance) {
     });
     fastify.get('/user/:user/guild/:guild/members/', async (request: FastifyRequest<{ Params: { user: string, guild: string }, Querystring: { query: string } }>, reply) => {
         reply.send(await getGuildMembers(configApi, request.params.user, request.params.guild, request.query.query));
+    });
+    fastify.get('/user/:user/guild/:guild/channels/', async (request: FastifyRequest<{ Params: { user: string, guild: string }, Querystring: { query: string } }>, reply) => {
+        reply.send(await getGuildChannels(configApi, request.params.user, request.params.guild, request.query.query));
     });
 }
 
@@ -265,6 +269,36 @@ async function getGuildMembers(configApi: ConfigApi, userId: string, guildId: st
 
     return members;
 }
+async function getGuildChannels(configApi: ConfigApi, userId: string, guildId: string, query?: string) {
+    const guild = await configApi.bot.fetcher.getGuild(guildId);
+    if (!guild) return new ApiError(ApiErrorType.guild_not_found, "Guild not found");
+
+    if (userId !== "admin") {
+        const member = await guild.getMember(userId);
+        if (!member) return new ApiError(ApiErrorType.member_not_found, "User is not a member of guild");
+    }
+
+    const channels: ApiDiscordChannelList = {
+        complete: true,
+        total: guild.guild.channels.channelCountWithoutThreads,
+        count: 0,
+        channels: []
+    }
+
+    let i = 0;
+
+    for (const channel of guild.guild.channels.cache.values()) {
+        if (i === 50) break;
+        if (!channel.isTextBased() || channel.isThread()) continue;
+        channels.channels.push(apiDiscordChannel(channel));
+        i++;
+    }
+    channels.count = i;
+    if (i < channels.total) channels.complete = false;
+
+    return channels;
+}
+
 function apiDiscordMember(member: GuildMember): ApiDiscordMember {
     return {
         id: member.id,
@@ -272,6 +306,13 @@ function apiDiscordMember(member: GuildMember): ApiDiscordMember {
         username: member.user.username,
         nickname: member.nickname,
         globalName: member.user.globalName || member.user.displayName
+    }
+}
+function apiDiscordChannel(channel: TextBasedGuildChannel): ApiDiscordChannel {
+    return {
+        id: channel.id,
+        name: channel.name,
+        type: channel.isThread() ? "thread" : channel.isVoiceBased() ? "voice" : "text"
     }
 }
 
