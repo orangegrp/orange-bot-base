@@ -70,6 +70,9 @@ function bindRoutes(configApi: ConfigApi, fastify: FastifyInstance) {
     fastify.post('/user/:user/guild/:guild/:module/', async (request: FastifyRequest<{ Params: { user: string, guild: string, module: string } }>, reply) => {
         reply.send(await setGuildSettings(configApi, request.params.module, request.params.guild, request.params.user, request.body));
     });
+    fastify.get('/user/:user/guild/:guild/members/', async (request: FastifyRequest<{ Params: { user: string, guild: string }, Querystring: { query: string } }>, reply) => {
+        reply.send(await getGuildMembers(configApi, request.params.user, request.params.guild, request.query.query));
+    });
 }
 
 function notFoundHandler(request: FastifyRequest, reply: FastifyReply) {
@@ -229,6 +232,47 @@ async function getGuildSettings(configApi: ConfigApi, user: string, guild: strin
         });
     }
     return response;
+}
+
+async function getGuildMembers(configApi: ConfigApi, userId: string, guildId: string, query?: string) {
+    const guild = await configApi.bot.fetcher.getGuild(guildId);
+    if (!guild) return new ApiError(ApiErrorType.guild_not_found, "Guild not found");
+
+    if (userId !== "admin") {
+        const member = await guild.getMember(userId);
+        if (!member) return new ApiError(ApiErrorType.member_not_found, "User is not a member of guild");
+    }
+
+    const members: ApiDiscordMemberList = {
+        complete: true,
+        total: guild.guild.memberCount,
+        count: 0,
+        members: []
+    };
+
+    let i = 0;
+
+    const memberList = query ? (await guild.guild.members.search({ limit: 50, query: query })).values()
+                             : guild.guild.members.cache.values();
+    
+    for (const member of memberList) {
+        if (i === 50) break;
+        members.members.push(apiDiscordMember(member));
+        i++;
+    }
+    members.count = i;
+    if (i < members.total) members.complete = false;
+
+    return members;
+}
+function apiDiscordMember(member: GuildMember): ApiDiscordMember {
+    return {
+        id: member.id,
+        icon: member.avatarURL() || member.user.avatarURL(),
+        username: member.user.username,
+        nickname: member.nickname,
+        globalName: member.user.globalName || member.user.displayName
+    }
 }
 
 function unknownApiDiscordUser(id: string): ApiDiscordUser {
