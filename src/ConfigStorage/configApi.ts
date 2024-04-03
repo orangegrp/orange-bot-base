@@ -100,6 +100,8 @@ function errorHandler(error: Error, request: FastifyRequest, reply: FastifyReply
     if (error.name === "GuildNotFoundError") return reply.send(new ApiError(ApiErrorType.guild_not_found, error.message));
     if (error.name === "MemberNotFoundError") return reply.send(new ApiError(ApiErrorType.member_not_found, error.message));
     if (error.name === "InvalidSnowflakeError") return reply.send(new ApiError(ApiErrorType.invalid_snowflake, error.message));
+    
+    logger.error(error);
     reply.send(new ApiError(ApiErrorType.unknown_error, "An unknown internal error has occurred.", error));
 }
 

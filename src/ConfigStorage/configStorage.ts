@@ -8,11 +8,13 @@ import type { Guild } from "../wrappers/guild";
 import type { RecordService, RecordModel } from 'pocketbase';
 import type { GuildResolvable, Snowflake, UserResolvable, PermissionResolvable } from "discord.js"
 import type { ConfigConfig, ConfigValueAny, ConfigValueScope, ConfigValues, ConfigValuesObj, RealValueTypeOf, ReturnValueTypeOf } from "./types.js";
+import sleep from '../helpers/sleep.js';
+import util from 'util';
 
 const pb = new PocketBase(`https://${process.env.PB_DOMAIN!}`);
+pb.autoCancellation(false);
 
 const logger = getLogger("ConfigStorage");
-
 
 interface Configurable<Values extends ConfigValues<ConfigValueScope>> {
     /**
@@ -64,7 +66,7 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
         if (!this.cache) {
             await this.fetch();
         }
-        
+
         this.cache![key] = value;
 
         if (this.exists_db) {
@@ -128,8 +130,8 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
         const valueOpts = this.values[key];
 
         // if it's an array, should it be one?
-        if (!!valueOpts.array !== !!Array.isArray(value)) return false; 
-        
+        if (!!valueOpts.array !== !!Array.isArray(value)) return false;
+
         if (Array.isArray(value) && valueOpts.array) {
             for (const _value of value) {
                 // are the types of entries correct?
@@ -157,8 +159,8 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
         const valueOpts = this.values[key];
 
         // if it's an array, should it be one?
-        if (!!valueOpts.array !== !!Array.isArray(value)) return false; 
-        
+        if (!!valueOpts.array !== !!Array.isArray(value)) return false;
+
         if (Array.isArray(value) && valueOpts.array) {
             // does it have too many entries?
             if (valueOpts.maxCount && value.length > valueOpts.maxCount) return false;
@@ -174,7 +176,7 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
         switch (valueOpts.type) {
             case ConfigValueType.string:
                 if (valueOpts.minLength !== undefined && (value as string).length < valueOpts.minLength) return false;
-                if (valueOpts.maxLength !== undefined && (value as string).length > valueOpts.maxLength) return false; 
+                if (valueOpts.maxLength !== undefined && (value as string).length > valueOpts.maxLength) return false;
                 return true;
             case ConfigValueType.user:
             case ConfigValueType.channel:
@@ -223,14 +225,14 @@ class _GuildConfigurable<Values extends ConfigValues<"guild">> extends _Configur
         }
         return super.setMany(data);
     }
-    async hasPermission(user: UserResolvable, key: keyof Values) {        
+    async hasPermission(user: UserResolvable, key: keyof Values) {
         const permissions = this.values[key].permissions;
 
         if (!permissions) return true; // no permissions set
 
         this.guild = await this.bot.fetcher.getGuild(this.id);
         if (!this.guild) throw new NamedError(`Guild with id "${this.id}" not found!`, "GuildNotFoundError");
-        
+
         const member = await this.guild.getMember(resolveUser(user));
         if (!member) throw new NamedError(`Couldn't find member "${user}" in "${this.guild.name}"`, "MemberNotFoundError");
 
@@ -256,13 +258,83 @@ class ConfigStorage<T extends ConfigConfig> {
         this.users = new Map();
         this.guilds = new Map();
         this.bot.configApi.addConfigStorage(this);
+        this.init();
     }
+
+    createSchema(target: ConfigValues<ConfigValueScope>) {
+        let schema_objects = [];
+        for (const key in target) {
+            if (target.hasOwnProperty(key)) {
+                const property = target[key];
+
+                if (property.array) {
+                    schema_objects.push({
+                        name: key,
+                        type: "json",
+                        required: false
+                    });
+                } else if (property.type === ConfigValueType.user ||
+                    property.type === ConfigValueType.channel ||
+                    property.type === ConfigValueType.member ||
+                    property.type === ConfigValueType.string) {
+                    schema_objects.push({
+                        name: key,
+                        type: "text",
+                        required: false,
+                    });
+                } else if (property.type === ConfigValueType.integer ||
+                    property.type === ConfigValueType.number) {
+                    schema_objects.push({
+                        name: key,
+                        type: "number",
+                        required: false
+                    });
+                } else if (property.type === ConfigValueType.object) {
+                    schema_objects.push({
+                        name: key,
+                        type: "json",
+                        required: false
+                    });
+                }
+            }
+        }
+
+        return schema_objects;
+    }
+
+    async ensureSchema(target: ConfigValues<ConfigValueScope>, suffix: "userconfig" | "guildconfig" | "globalconfig") {
+        if (target) {
+            const schema = this.createSchema(target);
+            const collections = await pb.collections.getFullList({ filter: `name = "${this.config.name}_${suffix}"` });
+            if (collections.length < 1) {
+                await pb.collections.create({ name: `${this.config.name}_${suffix}`, type: "base", schema: [...schema] });
+            } else {
+                if (!process.env.FORCE_SCHEMA_UPDATE) 
+                    logger.warn(`Schema update for "${this.config.name}_${suffix}" will not be applied as FORCE_SCHEMA_UPDATE is not set.`);
+                else
+                    await pb.collections.update(collections[0].id, { schema: [...schema] });
+            }
+        }
+    }
+
+    async init() {
+        while (!pb.authStore.isAdmin)
+            await sleep(1000);
+
+        if (this.config.user)
+            await this.ensureSchema(this.config.user, "userconfig");
+        if (this.config.guild)
+            await this.ensureSchema(this.config.guild, "guildconfig");
+        if (this.config.global)
+            await this.ensureSchema(this.config.global, "globalconfig");
+    }
+
     /**
      * Config for some user
      */
-    user(user: UserResolvable): UserConfig<T> {        
+    user(user: UserResolvable): UserConfig<T> {
         const id = resolveUser(user);
-        
+
         let userConf = this.users.get(id);
         if (!userConf) {
             userConf = new _Configurable<T["user"] & {}>(this.bot, this.config.user || {}, pb.collection(this.config.name + "_userconfig"), id);
@@ -302,7 +374,7 @@ type ConfigurableI<Config extends ConfigConfig, T extends "user" | "guild" | "gl
 type UserConfig<Values extends ConfigConfig> = Configurable<Values["user"] & {}>;
 type GuildConfig<Values extends ConfigConfig> = GuildConfigurable<Values["guild"] & {}>;
 type GlobalConfig<Values extends ConfigConfig> = Configurable<Values["global"] & {}>;
- 
+
 
 (async () => {
     await pb.admins.authWithPassword(process.env.PB_USERNAME!, process.env.PB_PASSWORD!);
