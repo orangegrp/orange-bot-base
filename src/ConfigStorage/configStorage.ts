@@ -267,7 +267,7 @@ class ConfigStorage<T extends ConfigConfig> {
             if (target.hasOwnProperty(key)) {
                 const property = target[key];
 
-                if (property.array) {
+                if (property.array || property.type === ConfigValueType.object) {
                     schema_objects.push({
                         name: key,
                         type: "json",
@@ -287,12 +287,6 @@ class ConfigStorage<T extends ConfigConfig> {
                     schema_objects.push({
                         name: key,
                         type: "number",
-                        required: false
-                    });
-                } else if (property.type === ConfigValueType.object) {
-                    schema_objects.push({
-                        name: key,
-                        type: "json",
                         required: false
                     });
                 }
