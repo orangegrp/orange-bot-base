@@ -261,8 +261,8 @@ class ConfigStorage<T extends ConfigConfig> {
         this.init();
     }
 
-    createSchema(target: ConfigValues<ConfigValueScope>) {
-        let schema_objects = [];
+    createSchema(target: ConfigValues<ConfigValueScope>): { name: string, type: string, required: boolean }[]{
+        let schema_objects: { name: string, type: string, required: boolean }[] = [];
         for (const key in target) {
             if (target.hasOwnProperty(key)) {
                 const property = target[key];
@@ -273,22 +273,27 @@ class ConfigStorage<T extends ConfigConfig> {
                         type: "json",
                         required: false
                     });
-                } else if (property.type === ConfigValueType.user ||
-                    property.type === ConfigValueType.channel ||
-                    property.type === ConfigValueType.member ||
-                    property.type === ConfigValueType.string) {
-                    schema_objects.push({
-                        name: key,
-                        type: "text",
-                        required: false,
-                    });
-                } else if (property.type === ConfigValueType.integer ||
-                    property.type === ConfigValueType.number) {
-                    schema_objects.push({
-                        name: key,
-                        type: "number",
-                        required: false
-                    });
+                } else {
+                    switch (property.type) {
+                        case ConfigValueType.user:
+                        case ConfigValueType.channel:
+                        case ConfigValueType.member:
+                        case ConfigValueType.string:
+                            schema_objects.push({
+                                name: key,
+                                type: "text",
+                                required: false,
+                            });
+                            break;
+                        case ConfigValueType.integer:
+                        case ConfigValueType.number:
+                            schema_objects.push({
+                                name: key,
+                                type: "number",
+                                required: false
+                            });
+                            break;
+                    }
                 }
             }
         }
@@ -296,15 +301,16 @@ class ConfigStorage<T extends ConfigConfig> {
         return schema_objects;
     }
 
-    async ensureSchema(target: ConfigValues<ConfigValueScope>, suffix: "userconfig" | "guildconfig" | "globalconfig") {
+    async ensureSchema(target: ConfigValues<ConfigValueScope>, suffix: "ucfg" | "gcfg" | "cfg") {
         if (target) {
             const schema = this.createSchema(target);
-            const collections = await pb.collections.getFullList({ filter: `name = "${this.config.name}_${suffix}"` });
+            console.log(`name = "x_dyn_${this.config.name}_${suffix}"`);
+            const collections = await pb.collections.getFullList({ filter: `name = "x_dyn_${this.config.name}_${suffix}"` });
             if (collections.length < 1) {
-                await pb.collections.create({ name: `${this.config.name}_${suffix}`, type: "base", schema: [...schema] });
+                await pb.collections.create({ name: `x_dyn_${this.config.name}_${suffix}`, type: "base", schema: schema });
             } else {
-                if (!process.env.FORCE_SCHEMA_UPDATE) 
-                    logger.warn(`Schema update for "${this.config.name}_${suffix}" will not be applied as FORCE_SCHEMA_UPDATE is not set.`);
+                if (!process.env.FORCE_SCHEMA_UPDATE)
+                    logger.warn(`Schema update for "x_dyn_${this.config.name}_${suffix}" will not be applied as FORCE_SCHEMA_UPDATE is not set.`);
                 else
                     await pb.collections.update(collections[0].id, { schema: [...schema] });
             }
@@ -312,15 +318,15 @@ class ConfigStorage<T extends ConfigConfig> {
     }
 
     async init() {
-        while (!pb.authStore.isAdmin)
+        while (!pb.authStore.isValid)
             await sleep(1000);
 
         if (this.config.user)
-            await this.ensureSchema(this.config.user, "userconfig");
+            await this.ensureSchema(this.config.user, "ucfg");
         if (this.config.guild)
-            await this.ensureSchema(this.config.guild, "guildconfig");
+            await this.ensureSchema(this.config.guild, "gcfg");
         if (this.config.global)
-            await this.ensureSchema(this.config.global, "globalconfig");
+            await this.ensureSchema(this.config.global, "cfg");
     }
 
     /**
@@ -331,7 +337,7 @@ class ConfigStorage<T extends ConfigConfig> {
 
         let userConf = this.users.get(id);
         if (!userConf) {
-            userConf = new _Configurable<T["user"] & {}>(this.bot, this.config.user || {}, pb.collection(this.config.name + "_userconfig"), id);
+            userConf = new _Configurable<T["user"] & {}>(this.bot, this.config.user || {}, pb.collection(`x_dyn_${this.config.name}_ucfg`), id);
             this.users.set(id, userConf);
         }
         return userConf;
@@ -344,7 +350,7 @@ class ConfigStorage<T extends ConfigConfig> {
 
         let guildConf = this.guilds.get(id);
         if (!guildConf) {
-            guildConf = new _GuildConfigurable<T["guild"] & {}>(this.bot, this.config.guild || {}, pb.collection(this.config.name + "_guildconfig"), id);
+            guildConf = new _GuildConfigurable<T["guild"] & {}>(this.bot, this.config.guild || {}, pb.collection(`x_dyn_${this.config.name}_gcfg`), id);
             this.users.set(id, guildConf);
         }
         return guildConf;
@@ -356,7 +362,7 @@ class ConfigStorage<T extends ConfigConfig> {
         if (!this.config.global) return undefined as never;
 
         if (!this._global) {
-            this._global = new _Configurable(this.bot, this.config.global, pb.collection("global"), "global");
+            this._global = new _Configurable(this.bot, this.config.global, pb.collection(`x_dyn_${this.config.name}_cfg`), "global");
         }
 
         return this._global as any;
@@ -368,7 +374,6 @@ type ConfigurableI<Config extends ConfigConfig, T extends "user" | "guild" | "gl
 type UserConfig<Values extends ConfigConfig> = Configurable<Values["user"] & {}>;
 type GuildConfig<Values extends ConfigConfig> = GuildConfigurable<Values["guild"] & {}>;
 type GlobalConfig<Values extends ConfigConfig> = Configurable<Values["global"] & {}>;
-
 
 (async () => {
     await pb.admins.authWithPassword(process.env.PB_USERNAME!, process.env.PB_PASSWORD!);

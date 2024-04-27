@@ -12,7 +12,7 @@ enum ConfigValueType {
 
 type ConfigConfig = {
     /**
-     * name of the module, must be unique, will be used on pocketbase as name_guildconfig and name_userconfig
+     * name of the module, must be unique, will be used on pocketbase as x_dyn_name_gcfg and x_dyn_name_ucfg
      * spaces are not allowed
      */
     readonly name: string
