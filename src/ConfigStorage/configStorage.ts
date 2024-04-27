@@ -262,13 +262,16 @@ class ConfigStorage<T extends ConfigConfig> {
     }
 
     createSchema(target: ConfigValues<ConfigValueScope>): { name: string, type: string, required: boolean }[]{
-        let schema_objects: { name: string, type: string, required: boolean }[] = [];
+        let schema_objects: { name: string, type: string, required: boolean, options?: any }[] = [];
         for (const key in target) {
             if (target.hasOwnProperty(key)) {
                 const property = target[key];
 
                 if (property.array || property.type === ConfigValueType.object) {
                     schema_objects.push({
+                        options: {
+                            maxSize: 2000000
+                        },
                         name: key,
                         type: "json",
                         required: false
@@ -302,18 +305,22 @@ class ConfigStorage<T extends ConfigConfig> {
     }
 
     async ensureSchema(target: ConfigValues<ConfigValueScope>, suffix: "ucfg" | "gcfg" | "cfg") {
-        if (target) {
-            const schema = this.createSchema(target);
-            console.log(`name = "x_dyn_${this.config.name}_${suffix}"`);
-            const collections = await pb.collections.getFullList({ filter: `name = "x_dyn_${this.config.name}_${suffix}"` });
-            if (collections.length < 1) {
-                await pb.collections.create({ name: `x_dyn_${this.config.name}_${suffix}`, type: "base", schema: schema });
-            } else {
-                if (!process.env.FORCE_SCHEMA_UPDATE)
-                    logger.warn(`Schema update for "x_dyn_${this.config.name}_${suffix}" will not be applied as FORCE_SCHEMA_UPDATE is not set.`);
-                else
-                    await pb.collections.update(collections[0].id, { schema: [...schema] });
+        try {
+            if (target) {
+                const schema = this.createSchema(target);
+                console.log(`name = "x_dyn_${this.config.name}_${suffix}"`);
+                const collections = await pb.collections.getFullList({ filter: `name = "x_dyn_${this.config.name}_${suffix}"` });
+                if (collections.length < 1) {
+                    await pb.collections.create({ name: `x_dyn_${this.config.name}_${suffix}`, type: "base", schema: schema });
+                } else {
+                    if (!process.env.FORCE_SCHEMA_UPDATE)
+                        logger.warn(`Schema update for "x_dyn_${this.config.name}_${suffix}" will not be applied as FORCE_SCHEMA_UPDATE is not set.`);
+                    else
+                        await pb.collections.update(collections[0].id, { schema: [...schema] });
+                }
             }
+        } catch (e: Error | any) {
+            logger.error(e);
         }
     }
 
