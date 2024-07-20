@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { getLogger } from "orange-common-lib";
+import { getLogger, initEnv } from "orange-common-lib";
 import { ApiError } from "./apiError.js";
 
 import type { GuildBasedChannel, GuildMember, TextBasedChannel, UserResolvable } from "discord.js";
@@ -14,11 +14,8 @@ import { asyncFilter } from "../helpers/arrayHelpers.js";
 import { ConfigConfig, ConfigValueScope, ConfigValueType, ConfigValues } from "./types.js";
 import { GuildChannel } from "../wrappers/channel.js";
 
-
 const PORT = parseInt(process.env.CONFIG_API_PORT || "0");
-
 const logger = getLogger("ConfigApi");
-
 
 class ConfigApi {
     readonly storages;

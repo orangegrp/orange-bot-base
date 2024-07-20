@@ -9,8 +9,7 @@ import type { RecordService, RecordModel } from 'pocketbase';
 import type { GuildResolvable, Snowflake, UserResolvable, PermissionResolvable } from "discord.js"
 import type { ConfigConfig, ConfigValueAny, ConfigValueScope, ConfigValues, ConfigValuesObj, RealValueTypeOf, ReturnValueTypeOf } from "./types.js";
 import sleep from '../helpers/sleep.js';
-import { environment, initEnv, ready } from 'orange-common-lib';
-initEnv();
+import { environment } from 'orange-common-lib';
 
 const pb = new PocketBase(`https://${environment.PB_DOMAIN}`);
 pb.autoCancellation(false);
@@ -436,8 +435,6 @@ type GuildConfig<Values extends ConfigConfig> = GuildConfigurable<Values["guild"
 type GlobalConfig<Values extends ConfigConfig> = Configurable<Values["global"] & {}>;
 
 (async () => {
-    while (!ready)
-        await sleep(1000);
     await pb.admins.authWithPassword(environment.PB_USERNAME!, environment.PB_PASSWORD!);
 })()
 
