@@ -398,13 +398,13 @@ class ConfigStorage<T extends ConfigConfig> {
         return guildConf;
     }
     /**
-     * Global config (does not work yet)
+     * Global config 
      */
     global(): T["global"] extends ConfigValues<"global"> ? GlobalConfig<T> : never {
         if (!this.config.global) return undefined as never;
 
         if (!this._global) {
-            this._global = new _Configurable(this.bot, this.config.global, pb.collection(`x_dyn_${this.config.name}_cfg`), "global");
+            this._global = new _Configurable(this.bot, this.config.global, pb.collection(`x_dyn_${this.config.name}_cfg`), "0");
         }
 
         return this._global as any;
