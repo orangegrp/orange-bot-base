@@ -7,7 +7,8 @@ enum ConfigValueType {
     user,
     channel,
     member,
-    object
+    object,
+    boolean
 }
 
 type ConfigConfig = {
@@ -106,8 +107,10 @@ type ConfigValueChannel<Scope extends ConfigValueScope> = ConfigValueBase<Config
 type ConfigValueMember<Scope extends ConfigValueScope> = ConfigValueBase<ConfigValueType.member, Scope>;
 
 type ConfigValueObject<Scope extends ConfigValueScope> = ConfigValueBase<ConfigValueType.object, Scope> & {
-    schema: any,
+    children: ConfigValues<Scope>,
 }
+
+type ConfigValueBoolean<Scope extends ConfigValueScope> = ConfigValueBase<ConfigValueType.boolean, Scope>;
 
 type ConfigValueAnyScoped<Scope extends ConfigValueScope> = 
     ConfigValueString<Scope> 
@@ -116,7 +119,8 @@ type ConfigValueAnyScoped<Scope extends ConfigValueScope> =
     | ConfigValueUser<Scope>
     | ConfigValueChannel<Scope>
     | ConfigValueMember<Scope>
-    | ConfigValueObject<Scope>;
+    | ConfigValueObject<Scope>
+    | ConfigValueBoolean<Scope>;
 
 type ConfigValueTypedScoped<Type extends ConfigValueType, Scope extends ConfigValueScope> = 
     Type extends ConfigValueType.string  ? ConfigValueString<Scope>  :
@@ -126,6 +130,7 @@ type ConfigValueTypedScoped<Type extends ConfigValueType, Scope extends ConfigVa
     Type extends ConfigValueType.channel ? ConfigValueChannel<Scope> :
     Type extends ConfigValueType.member  ? ConfigValueMember<Scope>  :
     Type extends ConfigValueType.object  ? ConfigValueObject<Scope>  :
+    Type extends ConfigValueType.boolean ? ConfigValueBoolean<Scope>  :
     never;
 
 type ConfigValueTyped<Type extends ConfigValueType> = ConfigValueTypedScoped<Type, ConfigValueScope>;
@@ -141,13 +146,19 @@ type RealValueType<T extends ConfigValueType> =
     : T extends ConfigValueType.channel  ? Snowflake
     : T extends ConfigValueType.member   ? Snowflake
     : T extends ConfigValueType.object   ? object
+    : T extends ConfigValueType.boolean  ? boolean
     : never;
+
+type ObjectValueType<T extends ConfigValueObject<ConfigValueScope>> = { [KEY in keyof T["children"]]: ReturnValueTypeOf<T["children"][KEY]> };
 
 type ArrayOfOrType<T, IsArray extends boolean> = IsArray extends true ? T[] : T;
 
-type RealValueTypeOf<T extends ConfigValueBase<ConfigValueType, ConfigValueScope>> = ArrayOfOrType<RealValueType<T["type"]>, T extends { array: true } ? true : false>;
+type _RealValueTypeOf<T extends ConfigValueBase<ConfigValueType, ConfigValueScope>, PARTIAL_ALLOWED> = 
+    ArrayOfOrType<T extends ConfigValueObject<ConfigValueScope> ? (PARTIAL_ALLOWED extends true ? Partial<ObjectValueType<T>> : ObjectValueType<T>) : RealValueType<T["type"]>, T extends { array: true } ? true : false>;
 
-type ReturnValueTypeOf<T extends ConfigValueBase<ConfigValueType, ConfigValueScope>> = T["default"] extends undefined ? RealValueTypeOf<T> | undefined : RealValueTypeOf<T>;
+type RealValueTypeOf<T extends ConfigValueBase<ConfigValueType, ConfigValueScope>> = _RealValueTypeOf<T, true>;
+
+type ReturnValueTypeOf<T extends ConfigValueBase<ConfigValueType, ConfigValueScope>> = T extends ({ default: any } | { type: ConfigValueType.object }) ? _RealValueTypeOf<T, false>: _RealValueTypeOf<T, false> | undefined;
 
 type ConfigValuesObj<Values extends ConfigValues<ConfigValueScope>> = { [KEY in keyof Values]: ReturnValueTypeOf<Values[KEY]> }
 

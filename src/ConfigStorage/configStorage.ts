@@ -49,9 +49,9 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
     private cache?: ConfigValuesObj<Values>;
     private readonly pocketId: string;
     private exists_db: boolean = false;
-    constructor(readonly bot: Bot, readonly values: Values, readonly collection: RecordService<RecordModel & ConfigValuesObj<Values>>, readonly id: string) {
+    constructor(readonly bot: Bot, readonly values: Values, readonly collection: RecordService<RecordModel & ConfigValuesObj<Values>>, readonly id: string, idIsPb: boolean = false) {
         this.cache = undefined;
-        this.pocketId = snowflakeToPocketId(id);
+        this.pocketId = idIsPb ? id : snowflakeToPocketId(id);
     }
     async getAll(): Promise<ConfigValuesObj<Values>> {
         if (this.cache) return this.cache;
@@ -68,6 +68,36 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
             await this.fetch();
         }
 
+        if (this.values[key].type == ConfigValueType.object) {
+            this._setObject(key, value);
+        }
+        else {
+            this._set(key, value);
+        }
+        return true;
+    }
+    // objects need extra work because of partials
+    async _setObject<K extends keyof Values>(key: K, value: RealValueTypeOf<Values[K]>) {
+        if (this.values[key].array) {
+            //@ts-expect-error this is fine
+            this.cache[key] = value;
+        }
+        else {
+            for (const subkey in value) {
+                //@ts-expect-error it doesn't know what this type is
+                this.cache[key][subkey] = value[subkey];
+            }
+        }
+        if (this.exists_db) {
+            await this.collection.update(this.pocketId, { [key]: this.cache![key] });
+        }
+        else {
+            await this.collection.create({ id: this.pocketId, [key]: this.cache![key] })
+        }
+        this.exists_db = true;
+    }
+    async _set<K extends keyof Values>(key: K, value: RealValueTypeOf<Values[K]>) {
+        //@ts-expect-error this happens due to objects which aren't set here
         this.cache![key] = value;
 
         if (this.exists_db) {
@@ -77,7 +107,6 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
             await this.collection.create({ id: this.pocketId, [key]: value })
         }
         this.exists_db = true;
-        return true;
     }
     async setMany(data: Partial<ConfigValuesObj<Values>>) {
         if (!this.cache) {
@@ -115,8 +144,14 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
         // populate defaults for missing values, leave the rest as undefined
         for (const name in this.values) {
             if (this.cache![name] === undefined || this.cache![name] === null) {
-                // @ts-expect-error   type errors are fun
-                this.cache[name] = this.values[name].default;
+                if (this.values[name].type === ConfigValueType.object) {
+                    // @ts-expect-error   type errors are fun
+                    this.cache[name] = {};
+                }
+                else {
+                    // @ts-expect-error   type errors are fun
+                    this.cache[name] = this.values[name].default;
+                }
             }
         }
         return this.cache!;
@@ -297,6 +332,13 @@ class ConfigStorage<T extends ConfigConfig> {
                                 required: false
                             });
                             break;
+                        case ConfigValueType.boolean:
+                            schema_objects.push({
+                                name: key,
+                                type: "bool",
+                                required: false
+                            });
+                            break;
                     }
                 }
             }
@@ -364,16 +406,26 @@ class ConfigStorage<T extends ConfigConfig> {
         return guildConf;
     }
     /**
-     * Global config (does not work yet)
+     * Global config 
      */
     global(): T["global"] extends ConfigValues<"global"> ? GlobalConfig<T> : never {
         if (!this.config.global) return undefined as never;
 
         if (!this._global) {
-            this._global = new _Configurable(this.bot, this.config.global, pb.collection(`x_dyn_${this.config.name}_cfg`), "global");
+            this._global = new _Configurable(this.bot, this.config.global, pb.collection(`x_dyn_${this.config.name}_cfg`), "0");
         }
 
         return this._global as any;
+    }
+    async setAllUsers<Key extends keyof T["user"]> (key: Key, value: T["user"] extends ConfigValues<"user"> ? RealValueTypeOf<T["user"][Key]> : void) {
+        // TODO: cached values aren't updated by this
+        const collection = pb.collection(`x_dyn_${this.config.name}_ucfg`);
+        const list = await collection.getFullList({ fields: "id" });
+        const promises = [];
+        for (const record of list) {
+            promises.push(collection.update(record.id, { [key]: value }));
+        }
+        await Promise.all(promises);
     }
 }
 
