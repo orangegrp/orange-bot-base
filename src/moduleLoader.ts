@@ -17,6 +17,7 @@ async function loadModules(bot: import("./bot.js").Bot, moduleDir: string) {
         if (!fileName.endsWith(".js")) continue;
         const module = await import(join(moduleDir, fileName))
         try {
+            logger.info(`Loading module ${chalk.white(fileName)}`);
             await module.default(bot);
             logger.ok(`Loaded module ${chalk.white(fileName)}`)
         }
