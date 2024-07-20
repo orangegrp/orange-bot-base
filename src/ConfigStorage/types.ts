@@ -7,7 +7,8 @@ enum ConfigValueType {
     user,
     channel,
     member,
-    object
+    object,
+    boolean
 }
 
 type ConfigConfig = {
@@ -109,6 +110,8 @@ type ConfigValueObject<Scope extends ConfigValueScope> = ConfigValueBase<ConfigV
     children: ConfigValues<Scope>,
 }
 
+type ConfigValueBoolean<Scope extends ConfigValueScope> = ConfigValueBase<ConfigValueType.boolean, Scope>;
+
 type ConfigValueAnyScoped<Scope extends ConfigValueScope> = 
     ConfigValueString<Scope> 
     | ConfigValueNumber<Scope>
@@ -116,7 +119,8 @@ type ConfigValueAnyScoped<Scope extends ConfigValueScope> =
     | ConfigValueUser<Scope>
     | ConfigValueChannel<Scope>
     | ConfigValueMember<Scope>
-    | ConfigValueObject<Scope>;
+    | ConfigValueObject<Scope>
+    | ConfigValueBoolean<Scope>;
 
 type ConfigValueTypedScoped<Type extends ConfigValueType, Scope extends ConfigValueScope> = 
     Type extends ConfigValueType.string  ? ConfigValueString<Scope>  :
@@ -126,6 +130,7 @@ type ConfigValueTypedScoped<Type extends ConfigValueType, Scope extends ConfigVa
     Type extends ConfigValueType.channel ? ConfigValueChannel<Scope> :
     Type extends ConfigValueType.member  ? ConfigValueMember<Scope>  :
     Type extends ConfigValueType.object  ? ConfigValueObject<Scope>  :
+    Type extends ConfigValueType.boolean ? ConfigValueBoolean<Scope>  :
     never;
 
 type ConfigValueTyped<Type extends ConfigValueType> = ConfigValueTypedScoped<Type, ConfigValueScope>;
@@ -141,6 +146,7 @@ type RealValueType<T extends ConfigValueType> =
     : T extends ConfigValueType.channel  ? Snowflake
     : T extends ConfigValueType.member   ? Snowflake
     : T extends ConfigValueType.object   ? object
+    : T extends ConfigValueType.boolean  ? boolean
     : never;
 
 type ObjectValueType<T extends ConfigValueObject<ConfigValueScope>> = { [KEY in keyof T["children"]]: ReturnValueTypeOf<T["children"][KEY]> };

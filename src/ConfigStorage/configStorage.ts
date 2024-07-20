@@ -48,9 +48,9 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
     private cache?: ConfigValuesObj<Values>;
     private readonly pocketId: string;
     private exists_db: boolean = false;
-    constructor(readonly bot: Bot, readonly values: Values, readonly collection: RecordService<RecordModel & ConfigValuesObj<Values>>, readonly id: string) {
+    constructor(readonly bot: Bot, readonly values: Values, readonly collection: RecordService<RecordModel & ConfigValuesObj<Values>>, readonly id: string, idIsPb: boolean = false) {
         this.cache = undefined;
-        this.pocketId = snowflakeToPocketId(id);
+        this.pocketId = idIsPb ? id : snowflakeToPocketId(id);
     }
     async getAll(): Promise<ConfigValuesObj<Values>> {
         if (this.cache) return this.cache;
@@ -331,6 +331,13 @@ class ConfigStorage<T extends ConfigConfig> {
                                 required: false
                             });
                             break;
+                        case ConfigValueType.boolean:
+                            schema_objects.push({
+                                name: key,
+                                type: "bool",
+                                required: false
+                            });
+                            break;
                     }
                 }
             }
@@ -408,6 +415,16 @@ class ConfigStorage<T extends ConfigConfig> {
         }
 
         return this._global as any;
+    }
+    async setAllUsers<Key extends keyof T["user"]> (key: Key, value: T["user"] extends ConfigValues<"user"> ? RealValueTypeOf<T["user"][Key]> : void) {
+        // TODO: cached values aren't updated by this
+        const collection = pb.collection(`x_dyn_${this.config.name}_ucfg`);
+        const list = await collection.getFullList({ fields: "id" });
+        const promises = [];
+        for (const record of list) {
+            promises.push(collection.update(record.id, { [key]: value }));
+        }
+        await Promise.all(promises);
     }
 }
 
