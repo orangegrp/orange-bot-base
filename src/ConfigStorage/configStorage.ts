@@ -67,6 +67,36 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
             await this.fetch();
         }
 
+        if (this.values[key].type == ConfigValueType.object) {
+            this._setObject(key, value);
+        }
+        else {
+            this._set(key, value);
+        }
+        return true;
+    }
+    // objects need extra work because of partials
+    async _setObject<K extends keyof Values>(key: K, value: RealValueTypeOf<Values[K]>) {
+        if (this.values[key].array) {
+            //@ts-expect-error this is fine
+            this.cache[key] = value;
+        }
+        else {
+            for (const subkey in value) {
+                //@ts-expect-error it doesn't know what this type is
+                this.cache[key][subkey] = value[subkey];
+            }
+        }
+        if (this.exists_db) {
+            await this.collection.update(this.pocketId, { [key]: this.cache![key] });
+        }
+        else {
+            await this.collection.create({ id: this.pocketId, [key]: this.cache![key] })
+        }
+        this.exists_db = true;
+    }
+    async _set<K extends keyof Values>(key: K, value: RealValueTypeOf<Values[K]>) {
+        //@ts-expect-error this happens due to objects which aren't set here
         this.cache![key] = value;
 
         if (this.exists_db) {
@@ -76,7 +106,6 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
             await this.collection.create({ id: this.pocketId, [key]: value })
         }
         this.exists_db = true;
-        return true;
     }
     async setMany(data: Partial<ConfigValuesObj<Values>>) {
         if (!this.cache) {
@@ -114,8 +143,14 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
         // populate defaults for missing values, leave the rest as undefined
         for (const name in this.values) {
             if (this.cache![name] === undefined || this.cache![name] === null) {
-                // @ts-expect-error   type errors are fun
-                this.cache[name] = this.values[name].default;
+                if (this.values[name].type === ConfigValueType.object) {
+                    // @ts-expect-error   type errors are fun
+                    this.cache[name] = {};
+                }
+                else {
+                    // @ts-expect-error   type errors are fun
+                    this.cache[name] = this.values[name].default;
+                }
             }
         }
         return this.cache!;
