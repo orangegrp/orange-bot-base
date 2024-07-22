@@ -2,6 +2,7 @@ import { EmbedBuilder, MessagePayload, type Message, type TextBasedChannel, Inte
 import type { Bot } from "./bot.js"
 import { ArgType, Command, CommandArgs, CommandOptions } from "./command.js";
 import { CommandWithExecutor } from "./commandManager.js";
+import { Module } from "./module.js";
 
 
 const helpCommand = {
@@ -37,8 +38,10 @@ const argNames: { [T in keyof ArgType as ArgType]: string } = {
 class HelpManager {
     private readonly bot: Bot;
     private readonly helpEntries: { [command: string]: HelpEntry } = {}
+    private readonly module: Module; 
     constructor(bot: Bot) {
         this.bot = bot;
+        this.module = new Module(bot, "HelpManager");
         this.bot.addChatCommand("help", (msg, args) => {
             if (!args[0])
                 return this.sendHelp(msg.channel);
@@ -58,7 +61,7 @@ class HelpManager {
 
         //helpCommand.args.command.choices.push(...Array.from(this.bot.commandManager.commands.keys()).map(name => ({ name: name, value: name })));
         
-        this.bot.addCommand(helpCommand, (interaction, args) => {
+        this.module.addCommand(helpCommand, (interaction, args) => {
             if (args.command) {
                 interaction.reply(this.getCommandHelp(args.command));
             }

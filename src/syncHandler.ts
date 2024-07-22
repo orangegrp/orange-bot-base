@@ -7,7 +7,7 @@ import { getLogger, type Logger } from "orange-common-lib";
 import type { Bot } from "./bot";
 import sleep from "./helpers/sleep.js";
 import mapOperations from "./helpers/mapOperations.js";
-import { CommandWithExecutor } from "./commandManager.js";
+import type { Module } from "./module.js";
 
 const DATA_PATH = "./config/SyncHandler/p2p-config.json";
 
@@ -29,7 +29,7 @@ const p2pConfigSchema = {
     priority: "number",
     port: "number",
     address: "string",
-    preferredCommands: ["string"]
+    preferredModules: ["string"]
 } satisfies JsonSchema
 
 class Peer {
@@ -37,7 +37,7 @@ class Peer {
     address: string;
     lastHeartbeat?: number;
     lastMessageId: number;
-    commands?: Commands;
+    modules?: Modules;
     knownDead: boolean;
     priority: number;
     constructor(data: ParseSchema<typeof p2pConfigSchema.peers[0]>) {
@@ -54,7 +54,7 @@ class Peer {
         return `${this.name} (${this.address})`;
     }
 }
-type Commands = {
+type Modules = {
     unavailable: string[],
     available: string[],
     handling: string[]
@@ -64,10 +64,10 @@ enum MessageType {
     heartbeat,
     instanceInfo,
     lostPeer,
-    assignCommand,
-    requestCommand,
+    assignModule,
+    requestModule,
     controlSwitch,
-    commandInfo
+    moduleInfo
 };
 type HelloMessage = {
     type: MessageType.hello,
@@ -91,15 +91,15 @@ type LostPeerMessage = {
     peer: string
 };
 
-type AssignCommandMessage = {
-    type: MessageType.assignCommand,
+type AssignModuleMessage = {
+    type: MessageType.assignModule,
     peer: string,
-    command: string
+    module: string
 };
 
-type RequestCommandMessage = {
-    type: MessageType.requestCommand,
-    command: string
+type RequestModuleMessage = {
+    type: MessageType.requestModule,
+    module: string
 }
 
 type ControlSwitchMessage = {
@@ -107,12 +107,12 @@ type ControlSwitchMessage = {
     controller: string
 };
 
-type CommandInfoMessage = {
-    type: MessageType.commandInfo,
-    commands: Commands,
+type ModuleInfoMessage = {
+    type: MessageType.moduleInfo,
+    modules: Modules,
 }
 
-type Message = HelloMessage | HeartbeatMessage | InstanceInfoMessage | LostPeerMessage | AssignCommandMessage | RequestCommandMessage | ControlSwitchMessage | CommandInfoMessage;
+type Message = HelloMessage | HeartbeatMessage | InstanceInfoMessage | LostPeerMessage | AssignModuleMessage | RequestModuleMessage | ControlSwitchMessage | ModuleInfoMessage;
 
 type MessageMeta = {
     source: string,
@@ -132,7 +132,7 @@ class SyncHandler {
     private controller: Peer | undefined;
     private readonly myself: Peer;
     private readonly server;
-    private preferredCommands?: string[];
+    private preferredModules?: string[];
     readonly certs;
 
     private currentMessageId = 1;
@@ -149,12 +149,12 @@ class SyncHandler {
         this.myself = new Peer({ address: "local", name: this.bot.instanceName });
         this.bot.commandManager.handleAll = false;
 
-        for (const command of bot.commandManager.commands.values()) {
-            if (command.unavailable) {
-                this.commands.unavailable.push(command.name);
+        for (const module of bot.modules.values()) {
+            if (module.isUnavailable) {
+                this.modules.unavailable.push(module.name);
             }
             else {
-                this.commands.available.push(command.name);
+                this.modules.available.push(module.name);
             }
         }
 
@@ -199,24 +199,24 @@ class SyncHandler {
     }
 
 
-    private get commands() {
-        const commands: Commands = {
+    private get modules() {
+        const modules: Modules = {
             unavailable: [],
             available: [],
             handling: []
         }
-        for (const command of this.bot.commandManager.commands.values()) {
-            if (command.unavailable) {
-                commands.unavailable.push(command.name);
+        for (const module of this.bot.modules.values()) {
+            if (module.isUnavailable) {
+                modules.unavailable.push(module.name);
             }
             else {
-                commands.available.push(command.name);
+                modules.available.push(module.name);
             }
-            if (command.handling) {
-                commands.handling.push(command.name);
+            if (module.isHandling) {
+                modules.handling.push(module.name);
             }
         }
-        return commands;
+        return modules;
     }
     private async begin() {
         const config = await this.loadConfig();
@@ -240,7 +240,7 @@ class SyncHandler {
         this.myself.priority = P2P_PRIORITY || data.priority;
         this.myself.address = P2P_MY_ADDRESS || data.address;
 
-        this.preferredCommands = data.preferredCommands;
+        this.preferredModules = data.preferredModules;
 
         this.peers.set(this.bot.instanceName, this.myself);
         return data;
@@ -299,7 +299,7 @@ class SyncHandler {
                 priority: this.myself.priority,
                 reply: true
             });
-            this.sendCommands();
+            this.sendModules();
         }
         else if (message.type == MessageType.lostPeer) {
             const deadPeer = this.peers.get(message.peer);
@@ -309,45 +309,45 @@ class SyncHandler {
             }            
             this.handleDeadPeer(deadPeer, true);
         }
-        else if (message.type == MessageType.assignCommand) {
-            const command = this.bot.commandManager.commands.get(message.command);
+        else if (message.type == MessageType.assignModule) {
+            const module = this.bot.modules.get(message.module);
 
             if (message.peer == this.bot.instanceName) {
-                if (!command) {
-                    this.logger.error(`${peer.fullName} assigned us the command "${message.command}", but we don't have that command.`);
+                if (!module) {
+                    this.logger.error(`${peer.fullName} assigned us the module "${message.module}", but we don't have that module.`);
                     return;
                 }
-                this.logger.info(`${peer.fullName} assigned us the command "${message.command}".`);
+                this.logger.info(`${peer.fullName} assigned us the module "${message.module}".`);
                 
-                this.handleCommand(command, true);
+                this.handleModule(module, true);
                 return;
             }
 
-            if (!command) { 
+            if (!module) { 
                 return;
             }
-            if (command.handling) {
-                this.logger.info(`${peer.fullName} assigned the command "${message.command}" to "${message.peer}", not handling anymore.`);
-                this.handleCommand(command, false);
+            if (module.isHandling) {
+                this.logger.info(`${peer.fullName} assigned the module "${message.module}" to "${message.peer}", not handling anymore.`);
+                this.handleModule(module, false);
             }
         }
-        else if (message.type == MessageType.requestCommand) {
+        else if (message.type == MessageType.requestModule) {
             if (!this.inControl) return; // only the controller can do this
 
-            const command = this.bot.commandManager.commands.get(message.command);
-            if (!command) {
-                this.logger.error(`${peer.fullName} requested a command that doesn't exist. ("${message.command}").`);
+            const module = this.bot.modules.get(message.module);
+            if (!module) {
+                this.logger.error(`${peer.fullName} requested a module that doesn't exist. ("${message.module}").`);
                 return;
             }
-            if (command.handling) {
-                this.handleCommand(command, false);
+            if (module.isHandling) {
+                this.handleModule(module, false);
             }
             this.sendMessage({
-                type: MessageType.assignCommand,
+                type: MessageType.assignModule,
                 peer: message.source,
-                command: command.name
+                module: module.name
             });
-            this.logger.info(`Assigned ${command.name} to ${message.source} as requested.`);
+            this.logger.info(`Assigned ${module.name} to ${message.source} as requested.`);
         }
         else if (message.type == MessageType.controlSwitch) {
             const controller = this.peers.get(message.controller);
@@ -369,30 +369,30 @@ class SyncHandler {
                 this.logger.info("I have control.");
             }
         }
-        else if (message.type == MessageType.commandInfo) {
-            for (const cmdName of message.commands.handling) {
-                const cmd = this.bot.commandManager.commands.get(cmdName);
-                if (!cmd) {
-                    this.logger.warn(`${peer.fullName} told us they are handling command "${cmdName}", but that command doesn't even exist. Misconfiguration?`);
+        else if (message.type == MessageType.moduleInfo) {
+            for (const mdlName of message.modules.handling) {
+                const mdl = this.bot.modules.get(mdlName);
+                if (!mdl) {
+                    this.logger.warn(`${peer.fullName} told us they are handling module "${mdlName}", but that module doesn't even exist. Misconfiguration?`);
                     continue;
                 }
-                if (cmd.handling) {
-                    this.logger.log(`${peer.fullName} told us they are handling command "${cmdName}", But we're handling it.`);
+                if (mdl.isHandling) {
+                    this.logger.log(`${peer.fullName} told us they are handling module "${mdlName}", But we're handling it.`);
                     
                     if (this.myself.priority < peer.priority) {
                         this.sendMessage({
-                            type: MessageType.requestCommand,
-                            command: cmdName
+                            type: MessageType.requestModule,
+                            module: mdlName
                         });
                     }
                     else {
-                        this.handleCommand(cmd, false);
-                        this.logger.log(`Stopped handling command "${cmdName}".`);
+                        this.handleModule(mdl, false);
+                        this.logger.log(`Stopped handling module "${mdlName}".`);
                     }
                 }
             }
 
-            peer.commands = message.commands;
+            peer.modules = message.modules;
         }
     }
     /** Called from SyncHandlerClient once it's connected. */
@@ -406,30 +406,30 @@ class SyncHandler {
             priority: this.myself.priority,
             reply: false,
         });
-        this.sendCommands();
-        if (!this.preferredCommands) return;
-        for (const cmdName of this.preferredCommands) {
-            this.logger.log(`Requesting command "${cmdName}".`);
+        this.sendModules();
+        if (!this.preferredModules) return;
+        for (const cmdName of this.preferredModules) {
+            this.logger.log(`Requesting module "${cmdName}".`);
             this.sendMessage({
-                type: MessageType.requestCommand,
-                command: cmdName
+                type: MessageType.requestModule,
+                module: cmdName
             });
         }
     }
 
-    private handleCommand(cmd: CommandWithExecutor<any>, handling: boolean) {
-        this.sendCommands();
-        cmd.handling = handling;
+    private handleModule(mdl: Module, handling: boolean) {
+        this.sendModules();
+        mdl.isHandling = handling;
     }
-    private sendCommands() {
+    private sendModules() {
         this.sendMessage({
-            type: MessageType.commandInfo,
-            commands: this.commands
+            type: MessageType.moduleInfo,
+            modules: this.modules
         });
     }
 
     async handlePeerConnectionFail() {
-        if (this.commands.available.length == this.commands.handling.length) {
+        if (this.modules.available.length == this.modules.handling.length) {
             // no need to do anything, we control everything already.
             // TODO: this wastes a tiny bit of resources by being ran constantly, fix?
             return;
@@ -441,13 +441,13 @@ class SyncHandler {
             return;
         }
 
-        this.logger.warn(`Peer connections failed, assuming control of all available commands.`);
+        this.logger.warn(`Peer connections failed, assuming control of all available modules.`);
 
         // i am the controller now
 
-        for (const command of this.bot.commandManager.commands.values()) {
-            if (!command.unavailable) {
-                command.handling = true;
+        for (const module of this.bot.modules.values()) {
+            if (!module.isUnavailable) {
+                module.isHandling = true;
             }
         }
         this.assumeControl();
@@ -476,7 +476,7 @@ class SyncHandler {
             
             this.handleDeadPeer(peer);
         }
-        if (this.inControl) this.checkCommands();
+        if (this.inControl) this.checkModules();
 
         if (!this.inControl) this.checkController();
     }
@@ -507,55 +507,55 @@ class SyncHandler {
 
         if (!this.inControl) return; // I am not in control, someone else will handle this
 
-        if (!peer.commands) return; // peer doesn't have commands, this is fine
-        if (peer.commands.handling.length == 0) return; // peer wasn't handling anything, this is fine
+        if (!peer.modules) return; // peer doesn't have modules, this is fine
+        if (peer.modules.handling.length == 0) return; // peer wasn't handling anything, this is fine
 
-        this.assignCommands(peer.commands.handling);
+        this.assignModules(peer.modules.handling);
     }
     /** This should only be called if this.inControl
-     * checks for unhandled commands and tries to assign them to instances
+     * checks for unhandled modules and tries to assign them to instances
      */
-    private checkCommands() {
-        const unhandledCmds: string[] = [];
-        for (const cmd of this.bot.commandManager.commands.values()) {
-            if (cmd.handling) continue; // we are handling it
+    private checkModules() {
+        const unhandledMdls: string[] = [];
+        for (const mdl of this.bot.modules.values()) {
+            if (mdl.isHandling) continue; // we are handling it
 
             if (mapOperations.some(this.peers, (name, peer) => {
-                if (!peer.alive || !peer.commands) return false;
-                return peer.commands.handling.includes(cmd.name);
+                if (!peer.alive || !peer.modules) return false;
+                return peer.modules.handling.includes(mdl.name);
             })) continue; // someone else is handling it
 
-            unhandledCmds.push(cmd.name);
+            unhandledMdls.push(mdl.name);
         }
 
-        this.assignCommands(unhandledCmds);
+        this.assignModules(unhandledMdls);
     }
     /** This should only be called if this.inControl
-     * Assigns commands to instances
+     * Assigns modules to instances
      */
-    private assignCommands(commands: string[]) {
-        for (const cmdName of commands) {
-            const cmd = this.bot.commandManager.commands.get(cmdName);
-            if (!cmd) {
-                this.logger.error(`Error assigning command "${cmdName}", it doesn't exist.`);
+    private assignModules(modules: string[]) {
+        for (const mdlName of modules) {
+            const mdl = this.bot.modules.get(mdlName);
+            if (!mdl) {
+                this.logger.error(`Error assigning module "${mdlName}", it doesn't exist.`);
                 continue;
             }
-            if (cmd.unavailable) { // this command isn't available to us, get someone else to do it
+            if (mdl.isUnavailable) { // this module isn't available to us, get someone else to do it
                 for (const peer of this.peers.values()) {
-                    if (peer.alive && peer.commands && peer.commands.available.includes(cmdName)) {
+                    if (peer.alive && peer.modules && peer.modules.available.includes(mdlName)) {
                         this.sendMessage({ // tell them to handle it
-                            type: MessageType.assignCommand,
+                            type: MessageType.assignModule,
                             peer: peer.name,
-                            command: cmdName
+                            module: mdlName
                         });
                     }
                 }
                 continue;
             }
-            // assume control of the command ourselves
-            cmd.handling = true;
+            // assume control of the module ourselves
+            mdl.isHandling = true;
         }
-        this.sendCommands();
+        this.sendModules();
     }
     private checkController() {
         let willControl = true;

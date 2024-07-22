@@ -10,8 +10,11 @@ import { type Logger, getLogger } from "orange-common-lib";
 import replyError from "./helpers/replyError.js";
 import { SyncHandler } from "./syncHandler.js";
 import { ConfigApi } from "./ConfigStorage/configApi.js";
+import { Module } from "./module.js";
 
 const logger = getLogger("main");
+
+type MessageHandler = (msg: Message<boolean>) => void;
 
 class Bot {
     readonly client: discord.Client;
@@ -22,6 +25,8 @@ class Bot {
     readonly helpManager: HelpManager;
     readonly commandManager: CommandManager;
     readonly fetcher: Fetcher;
+    readonly modules: Map<string, Module>;
+    readonly messageHandlers: MessageHandler[];
     private chatCommands: { [i: string]: ChatCommand } = {}
     private readonly token: string;
     private _configApi?: ConfigApi;
@@ -35,9 +40,11 @@ class Bot {
         this.env = process.env.NODE_ENV == "production" ? "prod" : "dev";
         this.prefix = prefix;
         this.token = token;
+        this.modules = new Map();
         this.commandManager = new CommandManager(this);
         this.helpManager = new HelpManager(this);
         this.fetcher = new Fetcher(this.client);
+        this.messageHandlers = [];
         client.on("messageCreate", msg => {
             if (!msg.content.startsWith(this.prefix)) return;
             const args = msg.content.replace(this.prefix, "").split(" ");
@@ -53,14 +60,21 @@ class Bot {
                 }
                 this.chatCommands[cmd!]?.callback(msg, args);
             }
+            for (const messageHandler of this.messageHandlers) {
+                messageHandler(msg);
+            }
         })
         client.on("ready", () => this.onLoggedIn());
     }
     addChatCommand(name: string, callback: (msg: discord.Message, args: string[]) => void, opts?: CommandOptions) {
         this.chatCommands[name] = { callback, opts: opts || {} };
     }
+    /**
+     * @deprecated
+     */ // TODO: legacy, remove
     addCommand<T extends Command>(command: T, executor: CommandExecutor<T>) {
-        this.commandManager.addCommand(command, executor);
+        logger.warn("bot.addCommand is deprecated, please use module.addCommand");
+        this.commandManager.addCommand(command, executor, new Module(this, `unknown module - ${command.name}`));
     }
     /**
      * Loads modules from a directory

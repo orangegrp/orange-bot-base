@@ -7,3 +7,4 @@ export { CachedLookup } from "./helpers/cachedLookup.js"
 export { DisplayError } from "./helpers/displayError.js"
 export { ConfigStorage, ConfigValueType, ConfigConfig } from "./ConfigStorage/configStorage.js"
 export { sleep };
+export type { Module } from "./module.js"

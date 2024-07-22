@@ -4,14 +4,14 @@ import type { ChatInputCommandInteraction, Interaction, Snowflake } from "discor
 import { type Command, parseInteractionOptions } from "./command.js";
 import { getLogger, type Logger } from "orange-common-lib";
 import { DisplayError } from "./helpers/displayError.js";
+import type { Module } from "./module.js";
 
 type CommandExecutor<T extends Command> = (interaction: ChatInputCommandInteraction, args: ResolveCommandArgs<T>) => Promise<void> | void
 
 type CommandWithExecutor<T extends Command> = Command & {
     executor: CommandExecutor<T>;
+    module: Module;
     id?: Snowflake;
-    unavailable?: true;
-    handling?: boolean;
 }
 
 class CommandManager {
@@ -26,11 +26,12 @@ class CommandManager {
         this.logger = getLogger("commandManager");
         this.bot.client.on(Events.InteractionCreate, interaction => this.onInteraction(interaction))
     }
-    addCommand<T extends Command>(command: T, executor: CommandExecutor<T>) {
+    addCommand<T extends Command>(command: T, executor: CommandExecutor<T>, module: Module) {
         const commandExec = command as CommandWithExecutor<T>;
 
         commandExec.executor = command.dontWrap ? executor
                              : this.wrapExecutor(command.name, executor);
+        commandExec.module = module;
     
         this.commands.set(command.name, commandExec);
     }
@@ -43,7 +44,7 @@ class CommandManager {
         const args = parseInteractionOptions(interaction.options.data);
 
         // TODO: handle commands from other instances in case they die
-        if (this.handleAll || command.handling) command.executor(interaction, args);
+        if (this.handleAll || command.module.isHandling) command.executor(interaction, args);
     }
     private wrapExecutor<T extends Command>(commandName: string, executor: CommandExecutor<T>): CommandExecutor<T> {
         return async (interaction, args) => {

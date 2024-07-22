@@ -3,6 +3,7 @@ import { getLogger } from "orange-common-lib";
 import { fileURLToPath } from "url";
 import { join } from "path"
 import chalk from "chalk";
+import { Module } from "./module.js";
 const logger = getLogger("moduleLoader");
 
 var done = false;
@@ -18,7 +19,7 @@ async function loadModules(bot: import("./bot.js").Bot, moduleDir: string) {
         const module = await import(join(moduleDir, fileName))
         try {
             logger.info(`Loading module ${chalk.white(fileName)}`);
-            await module.default(bot);
+            await module.default(bot, new Module(bot, fileName));
             logger.ok(`Loaded module ${chalk.white(fileName)}`)
         }
         catch (e) {
