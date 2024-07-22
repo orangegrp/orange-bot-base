@@ -661,18 +661,22 @@ class SyncHandlerClient {
         }
         
         this.logger.verbose(`Connecting to ${peer.fullName}`);
-
-        this.ws = new WebSocket(`wss://${peer.address}`, { 
-            hostname: "orange-bot",
-            ca: this.syncHandler.certs.caCert,
-            cert: this.syncHandler.certs.clientCert,
-            key: this.syncHandler.certs.clientKey,
-            rejectUnauthorized: true,
-            timeout: 5000,
-            checkServerIdentity: ((hostname: string, cert: PeerCertificate) => {
-                return tls.checkServerIdentity("orange-bot", cert);
-            }) as any as () => boolean
-        });
+        try {
+            this.ws = new WebSocket(`wss://${peer.address}`, { 
+                hostname: "orange-bot",
+                ca: this.syncHandler.certs.caCert,
+                cert: this.syncHandler.certs.clientCert,
+                key: this.syncHandler.certs.clientKey,
+                rejectUnauthorized: true,
+                timeout: 5000,
+                checkServerIdentity: ((hostname: string, cert: PeerCertificate) => {
+                    return tls.checkServerIdentity("orange-bot", cert);
+                }) as any as () => boolean
+            });
+        }
+        catch {
+            return;
+        }
 
         this.ws.on("open", () => {
             this.sendHello();
