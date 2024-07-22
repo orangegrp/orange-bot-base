@@ -11,6 +11,7 @@ import replyError from "./helpers/replyError.js";
 import { SyncHandler } from "./syncHandler.js";
 import { ConfigApi } from "./ConfigStorage/configApi.js";
 import { Module } from "./module.js";
+import { DebugModule } from "./debugModule.js";
 
 const logger = getLogger("main");
 
@@ -30,6 +31,7 @@ class Bot {
     private chatCommands: { [i: string]: ChatCommand } = {}
     private readonly token: string;
     private _configApi?: ConfigApi;
+    syncHandler?: SyncHandler; // TODO: private
     constructor(client: discord.Client, instanceName: string, version: string, prefix: string, token: string) {
         this.client = client;
         this.instanceName = instanceName;
@@ -83,7 +85,7 @@ class Bot {
     async loadModules(moduleDir: string) {
         await moduleLoader.load(this, moduleDir);
 
-        if (process.env.ENABLE_SYNC) new SyncHandler(this);
+        if (process.env.ENABLE_SYNC && !this.syncHandler) this.syncHandler = new SyncHandler(this);
     }
     getUser(id: Snowflake) {
         return this.fetcher.getUser(id);
@@ -115,6 +117,7 @@ class Bot {
         to.reply(opts);
     }
     private async onLoggedIn() {
+        if (process.env.ENABLE_DEBUG) new DebugModule(this);
         await moduleLoader.done();
 
         const deployer = new CommandDeployer(this, this.token);
