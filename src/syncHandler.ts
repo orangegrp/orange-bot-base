@@ -8,6 +8,7 @@ import type { Bot } from "./bot";
 import sleep from "./helpers/sleep.js";
 import mapOperations from "./helpers/mapOperations.js";
 import type { Module } from "./module.js";
+import { ConfigValueScope } from "./ConfigStorage/types.js";
 
 const DATA_PATH = "./config/SyncHandler/p2p-config.json";
 
@@ -67,7 +68,8 @@ enum MessageType {
     assignModule,
     requestModule,
     controlSwitch,
-    moduleInfo
+    moduleInfo,
+    expireConfigCache
 };
 type HelloMessage = {
     type: MessageType.hello,
@@ -112,7 +114,14 @@ type ModuleInfoMessage = {
     modules: Modules,
 }
 
-type Message = HelloMessage | HeartbeatMessage | InstanceInfoMessage | LostPeerMessage | AssignModuleMessage | RequestModuleMessage | ControlSwitchMessage | ModuleInfoMessage;
+type ExpireConfigCacheMessage = {
+    type: MessageType.expireConfigCache,
+    configName: string,
+    scope: ConfigValueScope,
+    id: string
+}
+
+type Message = HelloMessage | HeartbeatMessage | InstanceInfoMessage | LostPeerMessage | AssignModuleMessage | RequestModuleMessage | ControlSwitchMessage | ModuleInfoMessage | ExpireConfigCacheMessage;
 
 type MessageMeta = {
     source: string,
@@ -394,6 +403,14 @@ class SyncHandler {
 
             peer.modules = message.modules;
         }
+        else if (message.type == MessageType.expireConfigCache) {
+            const configStorage = this.bot.configApi.storages.get(message.configName);
+            if (!configStorage) {
+                this.logger.warn(`${peer.fullName} told us to expire config for ${message.configName}.${message.scope}.${message.id}, but we couldn't find a config by that name.`);
+                return;
+            }
+            configStorage.expireCache(message.scope, message.id);
+        }
     }
     /** Called from SyncHandlerClient once it's connected. */
     onClientConnected(peer: Peer) {
@@ -415,6 +432,15 @@ class SyncHandler {
                 module: cmdName
             });
         }
+    }
+
+    expireConfigCache(configName: string, scope: ConfigValueScope, id: string) {
+        this.sendMessage({
+            type: MessageType.expireConfigCache,
+            configName: configName,
+            scope: scope,
+            id: id
+        });
     }
 
     private handleModule(mdl: Module, handling: boolean) {

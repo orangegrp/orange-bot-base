@@ -55,9 +55,9 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
     private readonly pocketId: string;
     private exists_db: boolean = false;
     private cache_expiry?: number;
-    constructor(readonly bot: Bot, readonly values: Values, readonly collection: RecordService<RecordModel & ConfigValuesObj<Values>>, readonly id: string, idIsPb: boolean = false) {
+    constructor(readonly bot: Bot, readonly values: Values, readonly collection: RecordService<RecordModel & ConfigValuesObj<Values>>, readonly id: string, readonly scope: ConfigValueScope, readonly configName: string) {
         this.cache = undefined;
-        this.pocketId = idIsPb ? id : snowflakeToPocketId(id);
+        this.pocketId = snowflakeToPocketId(id);
     }
     async getAll(): Promise<ConfigValuesObj<Values>> {
         this.checkCache();
@@ -83,6 +83,7 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
         else {
             this._set(key, value);
         }
+        this.bot.syncHandler?.expireConfigCache(this.configName, this.scope, this.id);
         return true;
     }
     // objects need extra work because of partials
@@ -140,6 +141,7 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
             await this.collection.create(validatedData)
         }
         this.exists_db = true;
+        this.bot.syncHandler?.expireConfigCache(this.configName, this.scope, this.id);
         return true;
     }
     private async fetch(): Promise<ConfigValuesObj<Values>> {
@@ -407,7 +409,7 @@ class ConfigStorage<T extends ConfigConfig> {
 
         let userConf = this.users.get(id);
         if (!userConf) {
-            userConf = new _Configurable<T["user"] & {}>(this.bot, this.config.user || {}, pb.collection(`x_dyn_${this.config.name}_ucfg`), id);
+            userConf = new _Configurable<T["user"] & {}>(this.bot, this.config.user || {}, pb.collection(`x_dyn_${this.config.name}_ucfg`), id, "user", this.config.name);
             this.users.set(id, userConf);
         }
         return userConf;
@@ -420,7 +422,7 @@ class ConfigStorage<T extends ConfigConfig> {
 
         let guildConf = this.guilds.get(id);
         if (!guildConf) {
-            guildConf = new _GuildConfigurable<T["guild"] & {}>(this.bot, this.config.guild || {}, pb.collection(`x_dyn_${this.config.name}_gcfg`), id);
+            guildConf = new _GuildConfigurable<T["guild"] & {}>(this.bot, this.config.guild || {}, pb.collection(`x_dyn_${this.config.name}_gcfg`), id, "guild", this.config.name);
             this.users.set(id, guildConf);
         }
         return guildConf;
@@ -432,7 +434,7 @@ class ConfigStorage<T extends ConfigConfig> {
         if (!this.config.global) return undefined as never;
 
         if (!this._global) {
-            this._global = new _Configurable(this.bot, this.config.global, pb.collection(`x_dyn_${this.config.name}_cfg`), "0");
+            this._global = new _Configurable(this.bot, this.config.global, pb.collection(`x_dyn_${this.config.name}_cfg`), "0", "global", this.config.name);
         }
 
         return this._global as any;
@@ -446,6 +448,17 @@ class ConfigStorage<T extends ConfigConfig> {
             promises.push(collection.update(record.id, { [key]: value }));
         }
         await Promise.all(promises);
+    }
+    async expireCache(scope: ConfigValueScope, id: string) {
+        if (scope === "user") {
+            this.users.get(id)?.flushCache();
+        }
+        else if (scope === "global") {
+            this.guilds.get(id)?.flushCache();
+        }
+        else {
+            this._global?.flushCache();
+        }
     }
 }
 
