@@ -16,6 +16,12 @@ pb.autoCancellation(false);
 
 const logger = getLogger("ConfigStorage");
 
+const CACHE_EXPIRY_MS = Number.parseInt(process.env.CONFIGSTORAGE_CACHE_EXPIRY_S || "300") * 1000;
+if (Number.isNaN(CACHE_EXPIRY_MS)) {
+    logger.error(`CONFIGSTORAGE_CACHE_EXPIRY_S needs to be an integer, ignoring current value: "${process.env.CONFIGSTORAGE_CACHE_EXPIRY_S}"`);
+    // NaN will be interpreted the same as 0 in logic, this will disable cache expiry
+}
+
 interface Configurable<Values extends ConfigValues<ConfigValueScope>> {
     /**
      * Get a config value
@@ -48,21 +54,25 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
     private cache?: ConfigValuesObj<Values>;
     private readonly pocketId: string;
     private exists_db: boolean = false;
+    private cache_expiry?: number;
     constructor(readonly bot: Bot, readonly values: Values, readonly collection: RecordService<RecordModel & ConfigValuesObj<Values>>, readonly id: string, idIsPb: boolean = false) {
         this.cache = undefined;
         this.pocketId = idIsPb ? id : snowflakeToPocketId(id);
     }
     async getAll(): Promise<ConfigValuesObj<Values>> {
+        this.checkCache();
         if (this.cache) return this.cache;
         return this.fetch();
     }
     async get<K extends keyof Values>(key: K): Promise<ReturnValueTypeOf<Values[K]>> {
+        this.checkCache();
         if (this.cache) return this.cache[key];
 
         const data = await this.fetch();
         return data[key];
     }
     async set<K extends keyof Values>(key: K, value: RealValueTypeOf<Values[K]>): Promise<boolean> {
+        this.checkCache();
         if (!this.cache) {
             await this.fetch();
         }
@@ -108,6 +118,7 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
         this.exists_db = true;
     }
     async setMany(data: Partial<ConfigValuesObj<Values>>) {
+        this.checkCache();
         if (!this.cache) {
             await this.fetch();
         }
@@ -132,6 +143,10 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
         return true;
     }
     private async fetch(): Promise<ConfigValuesObj<Values>> {
+        if (CACHE_EXPIRY_MS) {
+            this.cache_expiry = Date.now() + CACHE_EXPIRY_MS;
+        }
+
         const res = await this.collection.getList(0, 1, { filter: `id = "${this.pocketId}"` });
         if (res.items[0]) {
             this.cache = res.items[0];
@@ -155,10 +170,16 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
         }
         return this.cache!;
     }
+    checkCache() {
+        if (this.cache_expiry && this.cache_expiry <= Date.now()) {
+            this.flushCache();
+        }
+    }
     flushCache() {
         if (this.cache) {
             delete this.cache;
             this.cache = undefined;
+            this.cache_expiry = undefined;
         }
     }
     checkType<K extends keyof Values>(key: K, value: any): value is RealValueTypeOf<Values[K]> {
