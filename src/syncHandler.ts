@@ -464,8 +464,8 @@ class SyncHandler {
     }
 
     private handleModule(mdl: Module, handling: boolean) {
-        this.sendModules();
         mdl.isHandling = handling;
+        this.sendModules();
     }
     sendModules() {
         this.sendMessage({
