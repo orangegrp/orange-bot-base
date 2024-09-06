@@ -8,6 +8,7 @@ interface IModule {
     addCommand<T extends Command>(command: T, executor: CommandExecutor<T>): void;
     addChatInteraction(executor: (msg: Message<boolean>) => void): void;
     setUnavailable(): void;
+    get isHandling(): boolean;
 }
 class Module implements IModule {
     private handling: boolean = false;
