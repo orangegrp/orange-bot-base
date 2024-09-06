@@ -35,8 +35,11 @@ class JsonDataStorage<SCHEMA extends JsonSchema, T extends ParseSchema<SCHEMA>> 
     constructor(dataPath: string, readonly schema: SCHEMA, logger: Logger) {
         this.dataPath = dataPath;
         this.logger = logger.sublogger(`json-storage ${dataPath}`);
+        if (process.env.GENERATE_CONFIG_SCHEMA) this.generateJsonSchema();
+        else this.ensureJsonSchema();
     }
-    makeSureDataFileExists(content: string | undefined = undefined): Promise<void> {
+    makeSureDataFileExists(content: string | undefined | T = undefined): Promise<void> {
+        if (typeof content !== "string" && typeof content !== "undefined") content = JSON.stringify(content, null, 4);
         return new Promise((resolve, reject) => {
             access(this.dataPath, fsconst.F_OK, err => {
                 if (err) writeFile(this.dataPath, content || "{}", err => {
@@ -48,9 +51,59 @@ class JsonDataStorage<SCHEMA extends JsonSchema, T extends ParseSchema<SCHEMA>> 
                     return resolve();
                 })
                 this.logger.log(`Created data file ${this.dataPath}`)
+                this.generateJsonSchema();
                 return resolve();
             })
         })
+    }
+    ensureJsonSchema() {
+        access(this.dataPath.replace(/\.json$/, ".schema.json"), fsconst.F_OK, err => {
+            if (err) this.generateJsonSchema();
+        })
+    }
+    generateJsonSchema() {
+        const jsonSchema: any = this.generateJsonSchemaRecurse(this.schema);
+        jsonSchema.properties["$schema"] = { type: "string" };
+        jsonSchema.additionalProperties = false;
+        const schemaPath = this.dataPath.replace(/\.json$/, ".schema.json");
+        writeFile(schemaPath, JSON.stringify(jsonSchema, null, 4), err => {
+            if (err) {
+                this.logger.error(`Error while creating ${schemaPath}:`);
+                this.logger.error(err);
+            }
+            this.logger.log(`Created schema file file ${schemaPath}`)
+        });
+    }
+    generateJsonSchemaRecurse(schema: JsonSchema) {
+        if (typeof schema === "string") {
+            const type = schema.replace("?", "");
+            if (schema.endsWith("?")) return { type, optional: true }
+            return { type }
+        }
+        if (Array.isArray(schema)) {
+            const child: any = this.generateJsonSchemaRecurse(schema[0]);
+            if (child.optional) delete child.optional;
+            return {
+                type: "array",
+                items: child
+            }
+        }
+        if (typeof schema === "object") {
+            const properties: { [name: string]: any } = {};
+            const required: string[] = [];
+            for (const key in schema) {
+                const child: any = this.generateJsonSchemaRecurse(schema[key]);
+                if (!child.optional) required.push(key);
+                else delete child.optional;
+                properties[key] = child;
+            }
+            return {
+                type: "object",
+                properties,
+                required
+            }
+        }
+        return {};
     }
 
     read(): Promise<T> {
