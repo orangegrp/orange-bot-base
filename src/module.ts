@@ -12,7 +12,8 @@ interface IModule {
 class Module implements IModule {
     private handling: boolean = false;
     private unavailable: boolean = false;
-    constructor(readonly bot: Bot, readonly name: string) {
+    handler: string | undefined;
+    constructor(readonly bot: Bot, readonly name: string, readonly disabled: boolean = false) {
         this.bot.modules.set(this.name, this);
     }
     addCommand<T extends Command>(command: T, executor: CommandExecutor<T>) {

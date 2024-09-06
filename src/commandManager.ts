@@ -44,7 +44,12 @@ class CommandManager {
         const args = parseInteractionOptions(interaction.options.data);
 
         // TODO: handle commands from other instances in case they die
-        if (this.handleAll || command.module.isHandling) command.executor(interaction, args);
+        if (this.handleAll || command.module.isHandling) {
+            command.executor(interaction, args);
+            return;
+        }
+
+        if (command.module.handler === undefined && this.bot.syncHandler?.inControl) this.bot.replyWithError(interaction, "Command currently unavailable", this.logger);
     }
     private wrapExecutor<T extends Command>(commandName: string, executor: CommandExecutor<T>): CommandExecutor<T> {
         return async (interaction, args) => {
@@ -74,6 +79,7 @@ class CommandManager {
             }
         }
     }
+
 }
 
 

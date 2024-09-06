@@ -211,7 +211,7 @@ class SyncHandler {
     }
 
     /** Am i in control? */
-    private get inControl() {
+    get inControl() {
         return this.controller?.name == this.bot.instanceName;
     }
 
@@ -345,6 +345,7 @@ class SyncHandler {
                 this.logger.info(`${peer.fullName} assigned us the module "${message.module}".`);
                 
                 this.handleModule(module, true);
+                module.handler = message.peer;
                 return;
             }
 
@@ -355,6 +356,7 @@ class SyncHandler {
                 this.logger.info(`${peer.fullName} assigned the module "${message.module}" to "${message.peer}", not handling anymore.`);
                 this.handleModule(module, false);
             }
+            module.handler = message.peer;
         }
         else if (message.type == MessageType.requestModule) {
             if (!this.inControl) return; // only the controller can do this
@@ -367,6 +369,7 @@ class SyncHandler {
             if (module.isHandling) {
                 this.handleModule(module, false);
             }
+            module.handler = message.source; // module is now handled by the requester
             this.sendMessage({
                 type: MessageType.assignModule,
                 peer: message.source,
@@ -412,6 +415,7 @@ class SyncHandler {
                     }
                     else {
                         this.handleModule(mdl, false);
+                        mdl.handler = peer.name;
                         this.logger.log(`Stopped handling module "${mdlName}".`);
                     }
                 }
@@ -463,7 +467,7 @@ class SyncHandler {
         this.sendModules();
         mdl.isHandling = handling;
     }
-    private sendModules() {
+    sendModules() {
         this.sendMessage({
             type: MessageType.moduleInfo,
             modules: this.modules
@@ -490,6 +494,7 @@ class SyncHandler {
         for (const module of this.bot.modules.values()) {
             if (!module.isUnavailable) {
                 module.isHandling = true;
+                module.handler = this.bot.instanceName;
             }
         }
         this.assumeControl();
@@ -596,6 +601,7 @@ class SyncHandler {
             }
             // assume control of the module ourselves
             mdl.isHandling = true;
+            mdl.handler = this.bot.instanceName;
         }
         this.sendModules();
     }
