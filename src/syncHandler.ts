@@ -11,6 +11,7 @@ import type { Module } from "./module.js";
 import { ConfigValueScope } from "./ConfigStorage/types.js";
 
 const DATA_PATH = "./config/SyncHandler/p2p-config.json";
+const CACHE_PATH = "./.cache/SyncHandler/p2p-cache.json";
 
 const P2P_SYNC_PORT = Number.parseInt(process.env.P2P_SYNC_PORT || "0");
 const P2P_PRIORITY = Number.parseInt(process.env.P2P_PRIORITY || "0");
@@ -29,19 +30,23 @@ const p2pConfigSchema = {
     }],
     priority: "number",
     port: "number",
-    address: "string",
-    preferredModules: ["string"]
+    address: "string?",
+    preferredModules: ["string"],
+} satisfies JsonSchema
+
+const peerCacheSchema = {
+    peers: p2pConfigSchema.peers
 } satisfies JsonSchema
 
 class Peer {
     name: string;
-    address: string;
+    address: string | undefined;
     lastHeartbeat?: number;
     lastMessageId: number;
     modules?: Modules;
     knownDead: boolean;
     priority: number;
-    constructor(data: ParseSchema<typeof p2pConfigSchema.peers[0]>) {
+    constructor(data: { name: string, address: string | undefined }) {
         this.name = data.name;
         this.address = data.address;
         this.lastMessageId = 0;
@@ -83,7 +88,7 @@ type HeartbeatMessage = {
 
 type InstanceInfoMessage = {
     type: MessageType.instanceInfo,
-    address: string,
+    address: string | undefined,
     priority: number,
     reply: boolean
 };
@@ -137,6 +142,7 @@ class SyncHandler {
     readonly bot;
     readonly peers: Map<string, Peer>;
     private readonly storage;
+    private readonly peerCache;
     /** Who's in charge? */
     private controller: Peer | undefined;
     private readonly myself: Peer;
@@ -154,6 +160,8 @@ class SyncHandler {
 
         this.peers = new Map();
         this.storage = new JsonDataStorage(DATA_PATH, p2pConfigSchema, this.logger);
+        this.peerCache = new JsonDataStorage(CACHE_PATH, peerCacheSchema, this.logger);
+        this.peerCache.makeSureDataFileExists({ peers: [] });
         this.client = new SyncHandlerClient(this, this.logger);
         this.myself = new Peer({ address: "local", name: this.bot.instanceName });
         this.bot.commandManager.handleAll = false;
@@ -252,6 +260,12 @@ class SyncHandler {
         this.preferredModules = data.preferredModules;
 
         this.peers.set(this.bot.instanceName, this.myself);
+
+        for (const peer of (await this.peerCache.read()).peers) {
+            if (this.peers.has(peer.name)) continue;
+            this.peers.set(peer.name, new Peer(peer)); 
+        }
+
         return data;
     }
     onMessage(message: FullMessage, rawMessage: RawData, source: WebSocket | "client", loop=false) {
@@ -259,6 +273,8 @@ class SyncHandler {
         if (!peer) {
             if (message.type == MessageType.instanceInfo && !loop) {
                 this.peers.set(message.source, new Peer({ name: message.source, address: message.address }));
+                const peersArray = Array.from(this.peers.values()).filter(peer => peer.address != undefined).map(peer => ({ name: peer.name, address: peer.address! }))
+                this.peerCache.save({ peers: peersArray });
                 this.logger.warn("Unknown peer: " + message.source);
                 this.onMessage(message, rawMessage, source, true);
             }
@@ -682,6 +698,12 @@ class SyncHandlerClient {
 
         if (peer.name == this.bot.instanceName) {
             // peer is ourselves, next.
+            setImmediate(() => this.connectNextPeer());
+            return;
+        }
+
+        if (peer.address == undefined) {
+            // peer does not have an address to connect to
             setImmediate(() => this.connectNextPeer());
             return;
         }
