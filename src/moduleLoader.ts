@@ -9,6 +9,8 @@ const logger = getLogger("moduleLoader");
 var done = false;
 const waiters: (() => void)[] = []
 
+const disabledModules = (process.env.DISABLED_MODULES || "").replace(/ /g, "").split(",");
+
 async function loadModules(bot: import("./bot.js").Bot, moduleDir: string) {
     logger.log(chalk.blue("Loading modules..."));
 
@@ -16,6 +18,11 @@ async function loadModules(bot: import("./bot.js").Bot, moduleDir: string) {
 
     for (const fileName of dir) {
         if (!fileName.endsWith(".js")) continue;
+        if (disabledModules.includes(fileName)) {
+            new Module(bot, fileName, true);
+            logger.info(`Skipped loading disabled module ${chalk.white(fileName)}`);
+            continue;
+        }
         const module = await import(join(moduleDir, fileName))
         try {
             logger.info(`Loading module ${chalk.white(fileName)}`);
@@ -23,6 +30,7 @@ async function loadModules(bot: import("./bot.js").Bot, moduleDir: string) {
             logger.ok(`Loaded module ${chalk.white(fileName)}`)
         }
         catch (e) {
+            new Module(bot, fileName).isUnavailable = true;
             if (e instanceof Error) {
                 logger.error(`Error loading module ${chalk.white(fileName)}:`);
                 logger.error(e);

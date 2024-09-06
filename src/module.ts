@@ -3,7 +3,13 @@ import type { Bot } from "./bot";
 import type { Command } from "./command";
 import type { CommandExecutor } from "./commandManager";
 
-class Module {
+
+interface IModule {
+    addCommand<T extends Command>(command: T, executor: CommandExecutor<T>): void;
+    addChatInteraction(executor: (msg: Message<boolean>) => void): void;
+    setUnavailable(): void;
+}
+class Module implements IModule {
     private handling: boolean = false;
     private unavailable: boolean = false;
     constructor(readonly bot: Bot, readonly name: string) {
@@ -17,6 +23,10 @@ class Module {
             if (this.isHandling) executor(msg);
         });
     }
+    setUnavailable(): void {
+        this.unavailable = true;
+        this.bot.syncHandler?.sendModules();
+    }
     get isHandling() {
         return this.handling;
     }
@@ -26,6 +36,9 @@ class Module {
     get isUnavailable() {
         return this.unavailable;
     }
+    set isUnavailable(unavailable: boolean) {
+        this.unavailable = unavailable;
+    }
 }
 
-export { Module }
+export { IModule, Module }
