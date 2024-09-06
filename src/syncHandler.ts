@@ -595,6 +595,7 @@ class SyncHandler {
                             peer: peer.name,
                             module: mdlName
                         });
+                        break;
                     }
                 }
                 continue;
