@@ -15,6 +15,7 @@ class Module implements IModule {
     private unavailable: boolean = false;
     handler: string | undefined;
     constructor(readonly bot: Bot, readonly name: string, readonly disabled: boolean = false) {
+        if (disabled) this.unavailable = true;
         this.bot.modules.set(this.name, this);
     }
     addCommand<T extends Command>(command: T, executor: CommandExecutor<T>) {
