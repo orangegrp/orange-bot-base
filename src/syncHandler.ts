@@ -590,6 +590,7 @@ class SyncHandler {
             if (mdl.isUnavailable) { // this module isn't available to us, get someone else to do it
                 for (const peer of this.peers.values()) {
                     if (peer.alive && peer.modules && peer.modules.available.includes(mdlName)) {
+                        mdl.handler = peer.name;
                         this.sendMessage({ // tell them to handle it
                             type: MessageType.assignModule,
                             peer: peer.name,
@@ -598,6 +599,7 @@ class SyncHandler {
                         break;
                     }
                 }
+                mdl.handler = undefined;
                 continue;
             }
             // assume control of the module ourselves
