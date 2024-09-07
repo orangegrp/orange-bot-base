@@ -157,7 +157,7 @@ class HelpManager {
     async sendHelp(channel: TextBasedChannel): Promise<Message>;
     async sendHelp(channel: TextBasedChannel, command: string): Promise<Message>;
     async sendHelp(channel: TextBasedChannel, command?: string): Promise<Message>{
-        if (command)
+        if (command )
             return await channel.send(this.constructHelp(command));
         
         let help = "Commands: \`\`\`"
