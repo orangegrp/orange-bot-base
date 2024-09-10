@@ -18,15 +18,11 @@ async function loadModules(bot: import("./bot.js").Bot, moduleDir: string) {
 
     for (const fileName of dir) {
         if (!fileName.endsWith(".js")) continue;
-        if (disabledModules.includes(fileName)) {
-            new Module(bot, fileName, true);
-            logger.info(`Skipped loading disabled module ${chalk.white(fileName)}`);
-            continue;
-        }
         const module = await import(join(moduleDir, fileName))
         try {
             logger.info(`Loading module ${chalk.white(fileName)}`);
-            await module.default(bot, new Module(bot, fileName));
+            const disabled = disabledModules.includes(fileName)
+            await module.default(bot, new Module(bot, fileName, disabled));
             logger.ok(`Loaded module ${chalk.white(fileName)}`)
         }
         catch (e) {
