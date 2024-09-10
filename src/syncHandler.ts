@@ -80,6 +80,7 @@ type HelloMessage = {
     type: MessageType.hello,
     version: string,
     env: "prod" | "dev",
+    userId: string,
 };
 type HeartbeatMessage = {
     type: MessageType.heartbeat,
@@ -202,7 +203,8 @@ class SyncHandler {
                 this.sendMessageTo({
                     type: MessageType.hello,
                     version: this.bot.version,
-                    env: this.bot.env
+                    env: this.bot.env,
+                    userId: this.bot.client.user?.id || "",
                 }, ws);
             });
         });
@@ -778,6 +780,11 @@ class SyncHandlerClient {
             this.ws?.close();
             return false;
         }
+        if (message.userId !== this.bot.client.user?.id) {
+            this.logger.warn(`Peer instance ${peer.fullName} is on user "${message.userId}", we are "${this.bot.client.user?.id}", disconnecting...`);
+            this.ws?.close();
+            return false;
+        }
 
         if (message.source !== peer.name) {
             // some idiot configured it wrong
@@ -799,7 +806,8 @@ class SyncHandlerClient {
             source: this.bot.instanceName,
             id: 0,
             version: this.bot.version,
-            env: this.bot.env
+            env: this.bot.env,
+            userId: this.bot.client.user?.id || "",
         });
     }
 }
