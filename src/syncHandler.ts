@@ -406,6 +406,7 @@ class SyncHandler {
                     this.logger.warn(`${peer.fullName} told us they are handling module "${mdlName}", but that module doesn't even exist. Misconfiguration?`);
                     continue;
                 }
+                mdl.handler = message.source;
                 if (mdl.isHandling) {
                     this.logger.log(`${peer.fullName} told us they are handling module "${mdlName}", But we're handling it.`);
                     
