@@ -75,10 +75,22 @@ class HelpManager {
         embed.setTitle("help");
 
         for (const [name, command] of this.bot.commandManager.commands) {
-            embed.addFields({ name: this.getCommandMention(command), value: command.description });
+            if (command.options) embed.addFields({ name: this.getCommandMentionRecurse(command.name, command.id, command.options), value: command.description });
+            else embed.addFields({ name: this.getCommandMention(command), value: command.description });
         }
         
         return { embeds: [embed] };
+    }
+    private getCommandMentionRecurse(prefix: string, id: Snowflake | undefined, options: CommandOptions) {
+        let out = "";
+        for (const name in options) {
+            const option = options[name];
+            if ("options" in option)
+                out += this.getCommandMentionRecurse(`${prefix} ${name}`, id, option.options);
+            else
+                out += id ? `</${prefix} ${name}:${id}> ` : `${prefix} ${name}\n`
+        }
+        return out;
     }
     getCommandHelp(commandName: string): InteractionReplyOptions {
         const command = this.bot.commandManager.commands.get(commandName);
