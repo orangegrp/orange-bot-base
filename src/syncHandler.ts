@@ -275,7 +275,7 @@ class SyncHandler {
         if (!peer) {
             if (message.type == MessageType.instanceInfo && !loop) {
                 this.peers.set(message.source, new Peer({ name: message.source, address: message.address }));
-                const peersArray = Array.from(this.peers.values()).filter(peer => peer.address != undefined).map(peer => ({ name: peer.name, address: peer.address! }))
+                const peersArray = Array.from(this.peers.values()).filter(peer => (peer.address !== undefined && peer.address !== "")).map(peer => ({ name: peer.name, address: peer.address! }))
                 this.peerCache.save({ peers: peersArray });
                 this.logger.warn("Unknown peer: " + message.source);
                 this.onMessage(message, rawMessage, source, true);
@@ -713,7 +713,7 @@ class SyncHandlerClient {
             return;
         }
 
-        if (peer.address == undefined) {
+        if (peer.address === undefined || peer.address === "") {
             // peer does not have an address to connect to
             setImmediate(() => this.connectNextPeer());
             return;
