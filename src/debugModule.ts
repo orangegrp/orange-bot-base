@@ -42,6 +42,7 @@ const debugCommand = {
 
 type CommandInfo = {
     readonly name: string,
+    readonly handlerDebug: string,
     readonly handler: string,
     readonly module: string,
 }
@@ -69,18 +70,21 @@ class DebugModule {
                 timestamp: new Date().toISOString(),
                 fields: [
                     { name: "Module", value: cmdInfo.module, inline: true },
+                    { name: "Handler (debug)", value: cmdInfo.handlerDebug, inline: true },
                     { name: "Handler", value: cmdInfo.handler, inline: true },
                 ]
             }]});
             return;
         }
         else if (args.subCommandGroup === "module") {
-            const moduleHandler = this.getModuleHandler(args.module);
+            const moduleHandlerDebug = this.getModuleHandler(args.module);
+            const moduleHandler = this.bot.modules.get(args.module)?.handler || "undefined";
             interaction.reply({embeds: [{
                 title: `Module info - ${args.module}`,
                 description: "",
                 timestamp: new Date().toISOString(),
                 fields: [
+                    { name: "Handler (debug)", value: moduleHandlerDebug, inline: true },
                     { name: "Handler", value: moduleHandler, inline: true },
                 ]
             }]});
@@ -94,10 +98,20 @@ class DebugModule {
         const module = command.module;
 
         if (module.isHandling) {
-            return { name: commandName, handler: `${this.bot.instanceName} (this)`, module: module.name };
+            return { 
+                name: commandName,
+                handlerDebug: `${this.bot.instanceName} (this)`,
+                handler: module.handler || "undefined",
+                module: module.name
+            };
         }
 
-        return { name: commandName, handler: this.getModuleHandler(module.name), module: module.name };
+        return { 
+            name: commandName,
+            handlerDebug: this.getModuleHandler(module.name), 
+            handler: module.handler || "undefined",
+            module: module.name
+        };
     }
     getModuleHandler(moduleName: string) {
         if (this.bot.modules.get(moduleName)?.isHandling) {
