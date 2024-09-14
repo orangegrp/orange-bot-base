@@ -44,7 +44,7 @@ class CommandManager {
         const args = parseInteractionOptions(interaction.options.data);
 
         // TODO: handle commands from other instances in case they die
-        if (this.handleAll || command.module.isHandling) {
+        if (this.handleAll || command.module.isHandling || command.module.name == "debug") {
             command.executor(interaction, args);
             return;
         }

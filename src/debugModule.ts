@@ -1,7 +1,7 @@
 import { Module } from "./module.js";
 import type { Bot } from "./bot.js";
 import { ArgType, type Command, type ResolveCommandArgs } from "./command.js";
-import type { CacheType, ChatInputCommandInteraction } from "discord.js";
+import type { APIEmbed, CacheType, ChatInputCommandInteraction, MessagePayload } from "discord.js";
 
 const debugCommand = {
     name: "debug",
@@ -57,14 +57,14 @@ class DebugModule {
         if (args.subCommandGroup === "command") {
             const cmdInfo = this.getCommandInfo(args.command);
             if (!cmdInfo) {
-                interaction.reply({embeds: [{
+                this.replyOrMessage(interaction, [{
                     title: `Command info - ${args.command}`,
                     description: "Command not found. Try by module?",
                     timestamp: new Date().toISOString()
-                }]});
+                }]);
                 return;
             }
-            interaction.reply({embeds: [{
+            this.replyOrMessage(interaction, [{
                 title: `Command info - ${cmdInfo.name}`,
                 description: "",
                 timestamp: new Date().toISOString(),
@@ -72,22 +72,24 @@ class DebugModule {
                     { name: "Module", value: cmdInfo.module, inline: true },
                     { name: "Handler (debug)", value: cmdInfo.handlerDebug, inline: true },
                     { name: "Handler", value: cmdInfo.handler, inline: true },
+                    { name: "Instance", value: this.bot.instanceName },
                 ]
-            }]});
+            }]);
             return;
         }
         else if (args.subCommandGroup === "module") {
             const moduleHandlerDebug = this.getModuleHandler(args.module);
             const moduleHandler = this.bot.modules.get(args.module)?.handler || "undefined";
-            interaction.reply({embeds: [{
+            this.replyOrMessage(interaction, [{
                 title: `Module info - ${args.module}`,
                 description: "",
                 timestamp: new Date().toISOString(),
                 fields: [
                     { name: "Handler (debug)", value: moduleHandlerDebug, inline: true },
                     { name: "Handler", value: moduleHandler, inline: true },
+                    { name: "Instance", value: this.bot.instanceName },
                 ]
-            }]});
+            }]);
         }
     }
     getCommandInfo(commandName: string): CommandInfo | undefined {
@@ -132,7 +134,16 @@ class DebugModule {
         if (!handler) return "None"
         return handler;
     }
+    replyOrMessage(interaction: ChatInputCommandInteraction<CacheType>, embeds: APIEmbed[]) {
+        if (this.module.isHandling) {
+            interaction.reply({ embeds });
+            return;
+        }
+        interaction.channel?.send({ embeds });
+    }
 }
+
+
 
 
 export { DebugModule }
