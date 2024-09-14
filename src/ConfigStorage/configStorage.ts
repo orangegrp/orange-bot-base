@@ -11,8 +11,7 @@ import type { ConfigConfig, ConfigValueAny, ConfigValueScope, ConfigValues, Conf
 import sleep from '../helpers/sleep.js';
 import { environment } from 'orange-common-lib';
 
-const pb = new PocketBase(`https://${environment.PB_DOMAIN}`);
-pb.autoCancellation(false);
+
 
 const logger = getLogger("ConfigStorage");
 
@@ -21,6 +20,20 @@ if (Number.isNaN(CACHE_EXPIRY_MS)) {
     logger.error(`CONFIGSTORAGE_CACHE_EXPIRY_S needs to be an integer, ignoring current value: "${process.env.CONFIGSTORAGE_CACHE_EXPIRY_S}"`);
     // NaN will be interpreted the same as 0 in logic, this will disable cache expiry
 }
+
+class PocketBaseGetter {
+    private static pb?: PocketBase;
+    static async pocketbase() {
+        if (this.pb) return this.pb;
+
+        this.pb = new PocketBase(environment.POCKETBASE_URL);
+        await this.pb.admins.authWithPassword(environment.PB_USERNAME!, environment.PB_PASSWORD!);
+        
+        return this.pb;
+    }
+}
+
+
 
 interface Configurable<Values extends ConfigValues<ConfigValueScope>> {
     /**
@@ -312,6 +325,7 @@ class ConfigStorage<T extends ConfigConfig> {
     private readonly users: Map<string, ConfigurableI<T, "user">>;
     private readonly guilds: Map<string, ConfigurableI<T, "guild">>;
     private _global?: ConfigurableI<T, "global">;
+    private pb?: PocketBase;
     constructor(readonly config: T, private readonly bot: Bot) {
         this.users = new Map();
         this.guilds = new Map();
@@ -374,14 +388,14 @@ class ConfigStorage<T extends ConfigConfig> {
             if (target) {
                 const schema = this.createSchema(target);
                 console.log(`name = "x_dyn_${this.config.name}_${suffix}"`);
-                const collections = await pb.collections.getFullList({ filter: `name = "x_dyn_${this.config.name}_${suffix}"` });
+                const collections = await this.pb!.collections.getFullList({ filter: `name = "x_dyn_${this.config.name}_${suffix}"` });
                 if (collections.length < 1) {
-                    await pb.collections.create({ name: `x_dyn_${this.config.name}_${suffix}`, type: "base", schema: schema });
+                    await this.pb!.collections.create({ name: `x_dyn_${this.config.name}_${suffix}`, type: "base", schema: schema });
                 } else {
                     if (!process.env.FORCE_SCHEMA_UPDATE)
                         logger.warn(`Schema update for "x_dyn_${this.config.name}_${suffix}" will not be applied as FORCE_SCHEMA_UPDATE is not set.`);
                     else
-                        await pb.collections.update(collections[0].id, { schema: [...schema] });
+                        await this.pb!.collections.update(collections[0].id, { schema: [...schema] });
                 }
             }
         } catch (e: Error | any) {
@@ -390,7 +404,15 @@ class ConfigStorage<T extends ConfigConfig> {
     }
 
     async init() {
-        while (!pb.authStore.isValid)
+        try {
+            this.pb = await PocketBaseGetter.pocketbase();
+        }
+        catch (e: any) {
+            logger.error("ConfigStorage failed to load: ");
+            logger.object(e);
+        }
+
+        while (!this.pb?.authStore.isValid)
             await sleep(1000);
 
         if (this.config.user)
@@ -405,11 +427,13 @@ class ConfigStorage<T extends ConfigConfig> {
      * Config for some user
      */
     user(user: UserResolvable): UserConfig<T> {
+        if (!this.pb) throw new Error("ConfigStorage is unavailable");
+
         const id = resolveUser(user);
 
         let userConf = this.users.get(id);
         if (!userConf) {
-            userConf = new _Configurable<T["user"] & {}>(this.bot, this.config.user || {}, pb.collection(`x_dyn_${this.config.name}_ucfg`), id, "user", this.config.name);
+            userConf = new _Configurable<T["user"] & {}>(this.bot, this.config.user || {}, this.pb.collection(`x_dyn_${this.config.name}_ucfg`), id, "user", this.config.name);
             this.users.set(id, userConf);
         }
         return userConf;
@@ -418,11 +442,13 @@ class ConfigStorage<T extends ConfigConfig> {
      * Config for some guild
      */
     guild(guild: GuildResolvable): GuildConfig<T> {
+        if (!this.pb) throw new Error("ConfigStorage is unavailable");
+
         const id = resolveGuild(guild);
 
         let guildConf = this.guilds.get(id);
         if (!guildConf) {
-            guildConf = new _GuildConfigurable<T["guild"] & {}>(this.bot, this.config.guild || {}, pb.collection(`x_dyn_${this.config.name}_gcfg`), id, "guild", this.config.name);
+            guildConf = new _GuildConfigurable<T["guild"] & {}>(this.bot, this.config.guild || {}, this.pb.collection(`x_dyn_${this.config.name}_gcfg`), id, "guild", this.config.name);
             this.users.set(id, guildConf);
         }
         return guildConf;
@@ -431,17 +457,21 @@ class ConfigStorage<T extends ConfigConfig> {
      * Global config 
      */
     global(): T["global"] extends ConfigValues<"global"> ? GlobalConfig<T> : never {
+        if (!this.pb) throw new Error("ConfigStorage is unavailable");
+
         if (!this.config.global) return undefined as never;
 
         if (!this._global) {
-            this._global = new _Configurable(this.bot, this.config.global, pb.collection(`x_dyn_${this.config.name}_cfg`), "0", "global", this.config.name);
+            this._global = new _Configurable(this.bot, this.config.global, this.pb.collection(`x_dyn_${this.config.name}_cfg`), "0", "global", this.config.name);
         }
 
         return this._global as any;
     }
     async setAllUsers<Key extends keyof T["user"]> (key: Key, value: T["user"] extends ConfigValues<"user"> ? RealValueTypeOf<T["user"][Key]> : void) {
+        if (!this.pb) throw new Error("ConfigStorage is unavailable");
+
         // TODO: cached values aren't updated by this
-        const collection = pb.collection(`x_dyn_${this.config.name}_ucfg`);
+        const collection = this.pb.collection(`x_dyn_${this.config.name}_ucfg`);
         const list = await collection.getFullList({ fields: "id" });
         const promises = [];
         for (const record of list) {
@@ -467,9 +497,5 @@ type ConfigurableI<Config extends ConfigConfig, T extends "user" | "guild" | "gl
 type UserConfig<Values extends ConfigConfig> = Configurable<Values["user"] & {}>;
 type GuildConfig<Values extends ConfigConfig> = GuildConfigurable<Values["guild"] & {}>;
 type GlobalConfig<Values extends ConfigConfig> = Configurable<Values["global"] & {}>;
-
-(async () => {
-    await pb.admins.authWithPassword(environment.PB_USERNAME!, environment.PB_PASSWORD!);
-})()
 
 export { ConfigStorage, ConfigurableI, _GuildConfigurable, ConfigValueType, ConfigConfig };
