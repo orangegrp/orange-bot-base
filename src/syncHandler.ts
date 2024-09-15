@@ -266,6 +266,10 @@ class SyncHandler {
         return this.controller?.name == this.bot.instanceName;
     }
 
+    get whoIsInControl() {
+        return this.controller?.name;
+    }
+
     private async begin() {
         const config = await this.loadConfig();
 
