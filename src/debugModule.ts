@@ -99,7 +99,7 @@ class DebugModule {
 
         const module = command.module;
 
-        if (module.isHandling) {
+        if (module.handling) {
             return { 
                 name: commandName,
                 handlerDebug: `${this.bot.instanceName} (this)`,
@@ -116,7 +116,7 @@ class DebugModule {
         };
     }
     getModuleHandler(moduleName: string) {
-        if (this.bot.modules.get(moduleName)?.isHandling) {
+        if (this.bot.modules.get(moduleName)?.handling) {
             return this.bot.instanceName;
         }
 
@@ -126,7 +126,7 @@ class DebugModule {
 
         for (const peer of this.bot.syncHandler.peers.values()) {
             if (!peer.modules) continue;
-            if (peer.modules.handling.includes(moduleName)) {
+            if (peer.modules.some(mdlData => mdlData.name === moduleName && mdlData.handling)) {
                 handler = handler ? `${handler}, ${peer.name}` : peer.name;
             }
         }
@@ -135,7 +135,7 @@ class DebugModule {
         return handler;
     }
     replyOrMessage(interaction: ChatInputCommandInteraction<CacheType>, embeds: APIEmbed[]) {
-        if (this.module.isHandling) {
+        if (this.module.handling) {
             interaction.reply({ embeds });
             return;
         }

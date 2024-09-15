@@ -26,7 +26,7 @@ async function loadModules(bot: import("./bot.js").Bot, moduleDir: string) {
             logger.ok(`Loaded module ${chalk.white(fileName)}`)
         }
         catch (e) {
-            new Module(bot, fileName).isUnavailable = true;
+            new Module(bot, fileName).setUnavailable();
             if (e instanceof Error) {
                 logger.error(`Error loading module ${chalk.white(fileName)}:`);
                 logger.error(e);

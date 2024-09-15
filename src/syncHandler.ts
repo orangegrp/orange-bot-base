@@ -7,8 +7,9 @@ import { getLogger, type Logger } from "orange-common-lib";
 import type { Bot } from "./bot";
 import sleep from "./helpers/sleep.js";
 import mapOperations from "./helpers/mapOperations.js";
-import type { Module } from "./module.js";
+import type { Module, ModuleData } from "./module.js";
 import { ConfigValueScope } from "./ConfigStorage/types.js";
+import type { InstanceName } from "./types.js";
 
 const DATA_PATH = "./config/SyncHandler/p2p-config.json";
 const CACHE_PATH = "./.cache/SyncHandler/p2p-cache.json";
@@ -39,7 +40,7 @@ const peerCacheSchema = {
 } satisfies JsonSchema
 
 class Peer {
-    name: string;
+    name: InstanceName;
     address: string | undefined;
     lastHeartbeat?: number;
     lastMessageId: number;
@@ -47,7 +48,7 @@ class Peer {
     knownDead: boolean;
     priority: number;
     constructor(data: { name: string, address: string | undefined }) {
-        this.name = data.name;
+        this.name = data.name as InstanceName;
         this.address = data.address;
         this.lastMessageId = 0;
         this.knownDead = false;
@@ -60,11 +61,8 @@ class Peer {
         return `${this.name} (${this.address})`;
     }
 }
-type Modules = {
-    unavailable: string[],
-    available: string[],
-    handling: string[]
-}
+
+type Modules = ModuleData[]
 enum MessageType {
     hello,
     heartbeat,
@@ -96,12 +94,12 @@ type InstanceInfoMessage = {
 
 type LostPeerMessage = {
     type: MessageType.lostPeer,
-    peer: string
+    peer: InstanceName
 };
 
 type AssignModuleMessage = {
     type: MessageType.assignModule,
-    peer: string,
+    peer: InstanceName,
     module: string
 };
 
@@ -112,7 +110,7 @@ type RequestModuleMessage = {
 
 type ControlSwitchMessage = {
     type: MessageType.controlSwitch,
-    controller: string
+    controller: InstanceName
 };
 
 type ModuleInfoMessage = {
@@ -130,7 +128,7 @@ type ExpireConfigCacheMessage = {
 type Message = HelloMessage | HeartbeatMessage | InstanceInfoMessage | LostPeerMessage | AssignModuleMessage | RequestModuleMessage | ControlSwitchMessage | ModuleInfoMessage | ExpireConfigCacheMessage;
 
 type MessageMeta = {
-    source: string,
+    source: InstanceName,
     id: number,
 };
 
@@ -141,7 +139,7 @@ class SyncHandler {
     private readonly logger;
     readonly client;
     readonly bot;
-    readonly peers: Map<string, Peer>;
+    readonly peers: Map<InstanceName, Peer>;
     private readonly storage;
     private readonly peerCache;
     /** Who's in charge? */
@@ -152,6 +150,8 @@ class SyncHandler {
     readonly certs;
 
     private currentMessageId = 1;
+
+    private readonly modules: Modules;
 
     constructor(bot: Bot) {
         this.bot = bot;
@@ -167,13 +167,9 @@ class SyncHandler {
         this.myself = new Peer({ address: "local", name: this.bot.instanceName });
         this.bot.commandManager.handleAll = false;
 
+        this.modules = [];
         for (const module of bot.modules.values()) {
-            if (module.isUnavailable) {
-                this.modules.unavailable.push(module.name);
-            }
-            else {
-                this.modules.available.push(module.name);
-            }
+            this.modules.push(module.data);
         }
 
         this.server = https.createServer({
@@ -218,25 +214,6 @@ class SyncHandler {
     }
 
 
-    private get modules() {
-        const modules: Modules = {
-            unavailable: [],
-            available: [],
-            handling: []
-        }
-        for (const module of this.bot.modules.values()) {
-            if (module.isUnavailable) {
-                modules.unavailable.push(module.name);
-            }
-            else {
-                modules.available.push(module.name);
-            }
-            if (module.isHandling) {
-                modules.handling.push(module.name);
-            }
-        }
-        return modules;
-    }
     private async begin() {
         const config = await this.loadConfig();
 
@@ -254,7 +231,7 @@ class SyncHandler {
         for (const peer of data.peers) {
             if (peer.name == this.bot.instanceName) continue;
 
-            this.peers.set(peer.name, new Peer(peer));
+            this.peers.set(peer.name as InstanceName, new Peer(peer));
         }
         this.myself.priority = P2P_PRIORITY || data.priority;
         this.myself.address = P2P_MY_ADDRESS || data.address;
@@ -264,8 +241,8 @@ class SyncHandler {
         this.peers.set(this.bot.instanceName, this.myself);
 
         for (const peer of (await this.peerCache.read()).peers) {
-            if (this.peers.has(peer.name)) continue;
-            this.peers.set(peer.name, new Peer(peer)); 
+            if (this.peers.has(peer.name as InstanceName)) continue;
+            this.peers.set(peer.name as InstanceName, new Peer(peer)); 
         }
 
         return data;
@@ -346,19 +323,17 @@ class SyncHandler {
                 }
                 this.logger.info(`${peer.fullName} assigned us the module "${message.module}".`);
                 
-                this.handleModule(module, true);
-                module.handler = message.peer;
+                this.setModuleHandler(module, this.bot.instanceName);
                 return;
             }
 
             if (!module) { 
                 return;
             }
-            if (module.isHandling) {
+            if (module.handling) {
                 this.logger.info(`${peer.fullName} assigned the module "${message.module}" to "${message.peer}", not handling anymore.`);
-                this.handleModule(module, false);
+                this.setModuleHandler(module, message.peer);
             }
-            module.handler = message.peer;
         }
         else if (message.type == MessageType.requestModule) {
             if (!this.inControl) return; // only the controller can do this
@@ -368,10 +343,9 @@ class SyncHandler {
                 this.logger.error(`${peer.fullName} requested a module that doesn't exist. ("${message.module}").`);
                 return;
             }
-            if (module.isHandling) {
-                this.handleModule(module, false);
+            if (module.handling) {
+                this.setModuleHandler(module, undefined);
             }
-            module.handler = message.source; // module is now handled by the requester
             this.sendMessage({
                 type: MessageType.assignModule,
                 peer: message.source,
@@ -400,28 +374,31 @@ class SyncHandler {
             }
         }
         else if (message.type == MessageType.moduleInfo) {
-            for (const mdlName of message.modules.handling) {
-                const mdl = this.bot.modules.get(mdlName);
+            for (const mdlData of message.modules) {
+                const mdl = this.bot.modules.get(mdlData.name);
                 if (!mdl) {
-                    this.logger.warn(`${peer.fullName} told us they are handling module "${mdlName}", but that module doesn't even exist. Misconfiguration?`);
+                    this.logger.warn(`${peer.fullName} told us they are${mdlData.handling ? " " : " not "}handling module "${mdlData.name}", but that module doesn't even exist. Misconfiguration?`);
                     continue;
                 }
-                mdl.handler = message.source;
-                if (mdl.isHandling) {
-                    this.logger.log(`${peer.fullName} told us they are handling module "${mdlName}", But we're handling it.`);
+                if (!mdlData.handling) {
+                    if (mdl.handler == peer.name) mdl.handler = undefined;
+                    return;
+                }
+                if (mdl.handling) {
+                    this.logger.log(`${peer.fullName} told us they are handling module "${mdlData.name}", But we're handling it.`);
                     
                     if (this.myself.priority < peer.priority) {
                         this.sendMessage({
                             type: MessageType.requestModule,
-                            module: mdlName
+                            module: mdlData.name
                         });
                     }
                     else {
-                        this.handleModule(mdl, false);
-                        mdl.handler = peer.name;
-                        this.logger.log(`Stopped handling module "${mdlName}".`);
+                        this.setModuleHandler(mdl, peer.name);
+                        this.logger.log(`Stopped handling module "${mdlData.name}".`);
                     }
                 }
+                mdl.handler = message.source;
             }
 
             peer.modules = message.modules;
@@ -466,8 +443,8 @@ class SyncHandler {
         });
     }
 
-    private handleModule(mdl: Module, handling: boolean) {
-        mdl.isHandling = handling;
+    private setModuleHandler(mdl: Module, handler: InstanceName | undefined) {
+        mdl.handler = handler;
         this.sendModules();
     }
     sendModules() {
@@ -478,7 +455,7 @@ class SyncHandler {
     }
 
     async handlePeerConnectionFail() {
-        if (this.modules.available.length == this.modules.handling.length) {
+        if (this.modules.every(mdl => mdl.handling)) {
             // no need to do anything, we control everything already.
             // TODO: this wastes a tiny bit of resources by being ran constantly, fix?
             return;
@@ -495,8 +472,7 @@ class SyncHandler {
         // i am the controller now
 
         for (const module of this.bot.modules.values()) {
-            if (!module.isUnavailable) {
-                module.isHandling = true;
+            if (module.available) {
                 module.handler = this.bot.instanceName;
             }
         }
@@ -558,9 +534,11 @@ class SyncHandler {
         if (!this.inControl) return; // I am not in control, someone else will handle this
 
         if (!peer.modules) return; // peer doesn't have modules, this is fine
-        if (peer.modules.handling.length == 0) return; // peer wasn't handling anything, this is fine
 
-        this.assignModules(peer.modules.handling);
+        const peerHandledModules = peer.modules.filter(module => module.handling).map(module => module.name);
+        if (peerHandledModules.length == 0) return; // peer wasn't handling anything, this is fine
+
+        this.assignModules(peerHandledModules);
     }
     /** This should only be called if this.inControl
      * checks for unhandled modules and tries to assign them to instances
@@ -568,11 +546,11 @@ class SyncHandler {
     private checkModules() {
         const unhandledMdls: string[] = [];
         for (const mdl of this.bot.modules.values()) {
-            if (mdl.isHandling) continue; // we are handling it
+            if (mdl.handling) continue; // we are handling it
 
             if (mapOperations.some(this.peers, (name, peer) => {
                 if (!peer.alive || !peer.modules) return false;
-                return peer.modules.handling.includes(mdl.name);
+                return peer.modules.some(mdlData => mdlData.handling);
             })) continue; // someone else is handling it
 
             unhandledMdls.push(mdl.name);
@@ -590,9 +568,9 @@ class SyncHandler {
                 this.logger.error(`Error assigning module "${mdlName}", it doesn't exist.`);
                 continue;
             }
-            if (mdl.isUnavailable) { // this module isn't available to us, get someone else to do it
+            if (!mdl.available) { // this module isn't available to us, get someone else to do it
                 for (const peer of this.peers.values()) {
-                    if (peer.alive && peer.modules && peer.modules.available.includes(mdlName)) {
+                    if (peer.alive && peer.modules && peer.modules.some(mdlData => mdlData.name === mdl.name && mdlData.available)) {
                         mdl.handler = peer.name;
                         this.sendMessage({ // tell them to handle it
                             type: MessageType.assignModule,
@@ -606,7 +584,6 @@ class SyncHandler {
                 continue;
             }
             // assume control of the module ourselves
-            mdl.isHandling = true;
             mdl.handler = this.bot.instanceName;
         }
         this.sendModules();
