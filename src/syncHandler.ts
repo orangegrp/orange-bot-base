@@ -20,9 +20,61 @@ const P2P_MY_ADDRESS = process.env.P2P_MY_ADDRESS;
 const PEER_RETRY_TIME = 25000; // how long to wait before retrying connections to other peers (after they all failed)
 const P2P_HEARTBEAT_TIME = 10000; // heartbeat interval
 const P2P_DEAD_TIME = 2000; // how long after last heartbeat to consider a peer dead
-const P2P_GIVE_UP_TIME = 3000; // how long to wait after being unable to connect anywhere before assuming control of everything
-const P2P_CHECK_TIME = 10000; // how often to check if peers dissappear
+const P2P_GIVE_UP_TIME = 5000; // how long to wait after being unable to connect anywhere before assuming control of everything
+const P2P_CHECK_TIME = 5000; // how often to check if peers dissappear
 
+type MapUpdateAction = 'set' | 'delete' | 'clear' | 'notify'
+
+interface MapUpdateEvent<K, V> {
+    action: MapUpdateAction;
+    key: K | null;
+    value: V | null;
+}
+
+class ObservableMap<K, V> extends Map<K, V> {
+    private listeners: Array<(event: MapUpdateEvent<K, V>) => void> = [];
+
+    // Add a listener for updates
+    addListener(callback: (event: MapUpdateEvent<K, V>) => void): void {
+        this.listeners.push(callback);
+    }
+
+    // Remove a listener
+    removeListener(callback: (event: MapUpdateEvent<K, V>) => void): void {
+        this.listeners = this.listeners.filter(listener => listener !== callback);
+    }
+
+    // Notify all listeners of an update
+    private notifyListeners(action: MapUpdateAction, key: K | null, value: V | null): void {
+        this.listeners.forEach(listener => listener({ action, key, value }));
+    }
+
+    notify() {
+        this.listeners.forEach(listener => listener({ action: "notify", key: null, value: null }));
+    }
+
+    // Override the set method
+    set(key: K, value: V): this {
+        super.set(key, value);
+        this.notifyListeners('set', key, value); // Notify when a value is set
+        return this;
+    }
+
+    // Override the delete method
+    delete(key: K): boolean {
+        const result = super.delete(key);
+        if (result) {
+            this.notifyListeners('delete', key, null); // Notify when a value is deleted
+        }
+        return result;
+    }
+
+    // Override the clear method
+    clear(): void {
+        super.clear();
+        this.notifyListeners('clear', null, null); // Notify when the map is cleared
+    }
+}
 
 const p2pConfigSchema = {
     peers: [{
@@ -159,7 +211,8 @@ class SyncHandler {
 
         this.certs = loadCerts();
 
-        this.peers = new Map();
+        this.peers = new ObservableMap();
+
         this.storage = new JsonDataStorage(DATA_PATH, p2pConfigSchema, this.logger);
         this.peerCache = new JsonDataStorage(CACHE_PATH, peerCacheSchema, this.logger);
         this.peerCache.makeSureDataFileExists({ peers: [] });
@@ -188,7 +241,7 @@ class SyncHandler {
             ws.on("message", (data, isBinary) => {
                 const message = JSON.parse(data.toString()) as FullMessage;
                 // TODO: verify the message is good
-                if (saidHello) 
+                if (saidHello)
                     return this.onMessage(message, data, ws);
 
                 if (message.type !== MessageType.hello) {
@@ -213,7 +266,6 @@ class SyncHandler {
         return this.controller?.name == this.bot.instanceName;
     }
 
-
     private async begin() {
         const config = await this.loadConfig();
 
@@ -223,7 +275,7 @@ class SyncHandler {
             this.client.connectNextPeer();
             setInterval(() => this.checkStatus(), P2P_CHECK_TIME);
         });
-        
+
     }
     async loadConfig() {
         const data = await this.storage.read();
@@ -247,7 +299,7 @@ class SyncHandler {
 
         return data;
     }
-    onMessage(message: FullMessage, rawMessage: RawData, source: WebSocket | "client", loop=false) {
+    onMessage(message: FullMessage, rawMessage: RawData, source: WebSocket | "client", loop = false) {
         const peer = this.peers.get(message.source);
         if (!peer) {
             if (message.type == MessageType.instanceInfo && !loop) {
@@ -280,7 +332,7 @@ class SyncHandler {
 
             peer.priority = message.priority;
 
-            if (!this.controller || peer.priority < this.controller.priority) { 
+            if (!this.controller || peer.priority < this.controller.priority) {
                 if (this.inControl) { // if we're currently the controller, tell everyone of the new one
                     this.sendMessage({
                         type: MessageType.controlSwitch,
@@ -310,7 +362,7 @@ class SyncHandler {
             if (!deadPeer) {
                 this.logger.warn(`${peer.fullName} told us ${message.peer} died, but we didn't even know it existed. Misconfiguration?`);
                 return;
-            }            
+            }
             this.handleDeadPeer(deadPeer, true);
         }
         else if (message.type == MessageType.assignModule) {
@@ -327,7 +379,7 @@ class SyncHandler {
                 return;
             }
 
-            if (!module) { 
+            if (!module) {
                 return;
             }
             if (module.handling) {
@@ -492,14 +544,14 @@ class SyncHandler {
                 type: MessageType.heartbeat,
                 time: Date.now()
             });
-        }, 10*1000)
+        }, 10 * 1000)
     }
 
     private checkStatus() {
         for (const peer of this.peers.values()) {
             if (peer.alive) continue; // peer is alive, this is fine
             if (peer.knownDead) continue; // we already knew of this and it's been handled
-            
+
             this.handleDeadPeer(peer);
         }
         if (this.inControl) this.checkModules();
@@ -516,7 +568,7 @@ class SyncHandler {
 
         this.logger.warn(`Peer ${peer.fullName} died.`);
 
-        peer.knownDead = true; 
+        peer.knownDead = true;
         peer.lastMessageId = 0;
 
         if (!dontTell) {
@@ -616,7 +668,7 @@ class SyncHandler {
     private messageToData(message: Message): string {
         const fullMessage = message as FullMessage;
         fullMessage.source = this.bot.instanceName;
-        fullMessage.id = this.messageId(); 
+        fullMessage.id = this.messageId();
         return JSON.stringify(fullMessage);
     }
     private sendMessage(message: Message, except?: WebSocket | "client") {
@@ -624,7 +676,7 @@ class SyncHandler {
     }
     private sendMessageRaw(message: RawData | string, except?: WebSocket | "client") {
         if (except !== "client")
-        this.client.sendMessageRaw(message);
+            this.client.sendMessageRaw(message);
 
         for (const client of this.wsServer.clients) {
             if (except === client) continue;
@@ -645,7 +697,7 @@ class SyncHandlerClient {
     private readonly logger: Logger;
     private readonly syncHandler: SyncHandler;
     private readonly bot: Bot;
-    
+
     constructor(syncHandler: SyncHandler, logger: Logger) {
         this.syncHandler = syncHandler;
         this.bot = this.syncHandler.bot;
@@ -657,21 +709,21 @@ class SyncHandlerClient {
         if (next.done) this.peerIter = undefined;
         return next.value;
     }
-    
+
     sendMessage(message: FullMessage | RawData | string) {
         if (!this.ws || this.ws.readyState != WebSocket.OPEN) return false;
 
-        if (typeof(message) === "string") {
+        if (typeof (message) === "string") {
             this.ws.send(message);
             return true;
         }
-        
+
         this.ws.send(JSON.stringify(message));
         return true;
     }
     sendMessageRaw(message: RawData | string) {
         if (!this.ws || this.ws.readyState != WebSocket.OPEN) return false;
-        
+
         this.ws.send(message);
         return true;
     }
@@ -696,10 +748,10 @@ class SyncHandlerClient {
             setImmediate(() => this.connectNextPeer());
             return;
         }
-        
+
         this.logger.verbose(`Connecting to ${peer.fullName}`);
         try {
-            this.ws = new WebSocket(`wss://${peer.address}`, { 
+            this.ws = new WebSocket(`wss://${peer.address}`, {
                 hostname: "orange-bot",
                 ca: this.syncHandler.certs.caCert,
                 cert: this.syncHandler.certs.clientCert,
@@ -732,10 +784,10 @@ class SyncHandlerClient {
         this.ws.on("message", (data, isBinary) => {
             const message = JSON.parse(data.toString()) as FullMessage;
             // TODO: verify the message is good
-            
-            if (gotHello) 
+
+            if (gotHello)
                 this.syncHandler.onMessage(message, data, "client");
-            
+
             if (message.type === MessageType.hello) {
                 gotHello = this.processHello(message, peer);
                 if (gotHello) this.syncHandler.onClientConnected(peer);
@@ -752,7 +804,7 @@ class SyncHandlerClient {
             this.logger.warn(`Peer instance ${peer.fullName} is on a different version (${message.version}), disconnecting...`);
             this.ws?.close();
             return false;
-        } 
+        }
         if (message.version !== this.bot.version) {
             this.logger.warn(`Peer instance ${peer.fullName} is on "${message.env}", we are "${this.bot.env}", disconnecting...`);
             this.ws?.close();
@@ -771,7 +823,7 @@ class SyncHandlerClient {
             this.syncHandler.peers.delete(peer.name);
             peer.name = message.source;
             this.syncHandler.peers.set(peer.name, peer);
-            
+
             // in case this ever crashes it, uncomment following line:
             // this.peerIter = undefined;
         }
@@ -779,7 +831,7 @@ class SyncHandlerClient {
         return true;
     }
     private async sendHello() {
-        this.sendMessage({ 
+        this.sendMessage({
             type: MessageType.hello,
             source: this.bot.instanceName,
             id: 0,
