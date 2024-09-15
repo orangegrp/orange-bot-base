@@ -256,6 +256,7 @@ class SyncHandler {
                     userId: this.bot.client.user?.id || "",
                 }, ws);
             });
+            ws.on("close", () => this.checkStatus());
         });
 
         this.begin();
