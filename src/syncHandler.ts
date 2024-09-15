@@ -445,6 +445,10 @@ class SyncHandler {
                     this.logger.log(`${peer.fullName} told us they are handling module "${mdlData.name}", But we're handling it.`);
                     
                     if (this.myself.priority < peer.priority) {
+                        if (this.inControl) {
+                            this.setModuleHandler(mdl, this.bot.instanceName);
+                            this.sendModules();
+                        }
                         this.sendMessage({
                             type: MessageType.requestModule,
                             module: mdlData.name
@@ -455,7 +459,7 @@ class SyncHandler {
                         this.logger.log(`Stopped handling module "${mdlData.name}".`);
                     }
                 }
-                mdl.handler = message.source;
+                else mdl.handler = message.source;
             }
 
             peer.modules = message.modules;
