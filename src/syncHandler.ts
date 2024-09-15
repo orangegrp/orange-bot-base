@@ -17,10 +17,10 @@ const P2P_SYNC_PORT = Number.parseInt(process.env.P2P_SYNC_PORT || "0");
 const P2P_PRIORITY = Number.parseInt(process.env.P2P_PRIORITY || "0");
 const P2P_MY_ADDRESS = process.env.P2P_MY_ADDRESS;
 const PEER_RETRY_TIME = 25000; // how long to wait before retrying connections to other peers (after they all failed)
-const P2P_HEARTBEAT_TIME = 3000; // heartbeat interval
+const P2P_HEARTBEAT_TIME = 10000; // heartbeat interval
 const P2P_DEAD_TIME = 2000; // how long after last heartbeat to consider a peer dead
-const P2P_GIVE_UP_TIME = 3000; // how long to wait after being unable to connect anywhere before assuming control of everything
-const P2P_CHECK_TIME = 3000; // how often to check if peers dissappear
+const P2P_GIVE_UP_TIME = 5000; // how long to wait after being unable to connect anywhere before assuming control of everything
+const P2P_CHECK_TIME = 5000; // how often to check if peers dissappear
 
 type MapUpdateAction = 'set' | 'delete' | 'clear' | 'notify'
 
