@@ -12,6 +12,7 @@ import { SyncHandler } from "./syncHandler.js";
 import { ConfigApi } from "./ConfigStorage/configApi.js";
 import { Module } from "./module.js";
 import { DebugModule } from "./debugModule.js";
+import type { InstanceName } from "./types.js";
 
 const logger = getLogger("main");
 
@@ -19,7 +20,7 @@ type MessageHandler = (msg: Message<boolean>) => void;
 
 class Bot {
     readonly client: discord.Client;
-    readonly instanceName: string;
+    readonly instanceName: InstanceName;
     readonly version: string;
     readonly env: "prod" | "dev";
     readonly prefix: string;
@@ -34,7 +35,7 @@ class Bot {
     syncHandler?: SyncHandler; // TODO: private
     constructor(client: discord.Client, instanceName: string, version: string, prefix: string, token: string) {
         this.client = client;
-        this.instanceName = instanceName;
+        this.instanceName = instanceName as InstanceName;
         this.version = version;
         if (process.env.NODE_ENV !== "production" && process.env.NODE_ENV !== "development") {
             logger.warn(`"NODE_ENV" is not "production" or "development", assuming "development"`);
