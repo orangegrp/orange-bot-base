@@ -22,7 +22,7 @@ class Module implements IModule {
     constructor(readonly bot: Bot, readonly name: string, readonly disabled: boolean = false) {
         this.data = {
             name: name,
-            available: disabled,
+            available: !disabled,
             handling: false,
         }
         this.bot.modules.set(this.name, this);
