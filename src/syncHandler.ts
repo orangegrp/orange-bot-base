@@ -9,14 +9,15 @@ import sleep from "./helpers/sleep.js";
 import mapOperations from "./helpers/mapOperations.js";
 import type { Module, ModuleData } from "./module.js";
 import { ConfigValueScope } from "./ConfigStorage/types.js";
-import type { InstanceName } from "./types.js";
+import type { InstanceName, UniqueString } from "./types.js";
+import { Address4, Address6 } from "ip-address"
 
-const DATA_PATH = "./config/SyncHandler/p2p-config.json";
 const CACHE_PATH = "./.cache/SyncHandler/p2p-cache.json";
 
 const P2P_SYNC_PORT = Number.parseInt(process.env.P2P_SYNC_PORT || "0");
-const P2P_PRIORITY = Number.parseInt(process.env.P2P_PRIORITY || "0");
 const P2P_MY_ADDRESS = process.env.P2P_MY_ADDRESS;
+const P2P_PEERS = process.env.P2P_PEERS;
+const P2P_PREFERRED_MODULES = process.env.P2P_PREFERRED_MODULES;
 const PEER_RETRY_TIME = 25000; // how long to wait before retrying connections to other peers (after they all failed)
 const P2P_HEARTBEAT_TIME = 10000; // heartbeat interval
 const P2P_DEAD_TIME = 2000; // how long after last heartbeat to consider a peer dead
@@ -76,32 +77,25 @@ class ObservableMap<K, V> extends Map<K, V> {
     }
 }
 
-const p2pConfigSchema = {
+
+const peerCacheSchema = {
     peers: [{
         name: "string",
         address: "string"
-    }],
-    priority: "number",
-    port: "number",
-    address: "string?",
-    preferredModules: ["string"],
-} satisfies JsonSchema
-
-const peerCacheSchema = {
-    peers: p2pConfigSchema.peers
+    }]
 } satisfies JsonSchema
 
 class Peer {
     name: InstanceName;
-    address: string | undefined;
+    address: PeerAddress | undefined;
     lastHeartbeat?: number;
     lastMessageId: number;
     modules?: Modules;
     knownDead: boolean;
     priority: number;
-    constructor(data: { name: string, address: string | undefined }) {
-        this.name = data.name as InstanceName;
-        this.address = data.address;
+    constructor(name: InstanceName, address?: PeerAddress) {
+        this.name = name;
+        this.address = address;
         this.lastMessageId = 0;
         this.knownDead = false;
         this.priority = -1;
@@ -113,6 +107,8 @@ class Peer {
         return `${this.name} (${this.address})`;
     }
 }
+
+type PeerAddress = UniqueString<"PeerAddress">;
 
 type Modules = ModuleData[]
 enum MessageType {
@@ -139,7 +135,7 @@ type HeartbeatMessage = {
 
 type InstanceInfoMessage = {
     type: MessageType.instanceInfo,
-    address: string | undefined,
+    address: PeerAddress | undefined,
     priority: number,
     reply: boolean
 };
@@ -192,13 +188,12 @@ class SyncHandler {
     readonly client;
     readonly bot;
     readonly peers: Map<InstanceName, Peer>;
-    private readonly storage;
     private readonly peerCache;
     /** Who's in charge? */
     private controller: Peer | undefined;
     private readonly myself: Peer;
     private readonly server;
-    private preferredModules?: string[];
+    private readonly preferredModules?: string[];
     readonly certs;
 
     private currentMessageId = 1;
@@ -211,13 +206,22 @@ class SyncHandler {
 
         this.certs = loadCerts();
 
-        this.peers = new ObservableMap();
+        this.peers = new Map();
+        this.preferredModules = P2P_PREFERRED_MODULES?.replace(/ /g, "").split(",");
 
-        this.storage = new JsonDataStorage(DATA_PATH, p2pConfigSchema, this.logger);
         this.peerCache = new JsonDataStorage(CACHE_PATH, peerCacheSchema, this.logger);
         this.peerCache.makeSureDataFileExists({ peers: [] });
         this.client = new SyncHandlerClient(this, this.logger);
-        this.myself = new Peer({ address: "local", name: this.bot.instanceName });
+
+        this.myself = this.createPeer(this.bot.instanceName, P2P_MY_ADDRESS as PeerAddress);
+        this.myself.priority = Date.now();
+        this.peers.set(this.bot.instanceName, this.myself);
+
+        this.logger.log(`Instance: ${this.myself.name}`);
+        this.logger.log(`Address: ${this.myself.address}`);
+        this.logger.log(`Priority: ${this.myself.priority}`);
+
+
         this.bot.commandManager.handleAll = false;
 
         this.modules = [];
@@ -272,45 +276,39 @@ class SyncHandler {
     }
 
     private async begin() {
-        const config = await this.loadConfig();
+        for (const peer of (await this.peerCache.read()).peers) {
+            if (this.peers.has(peer.name as InstanceName)) continue;
+            this.createPeer(peer.name as InstanceName, peer.address as PeerAddress); 
+        }
 
-        this.server.listen(P2P_SYNC_PORT || config.port, () => {
-            this.logger.log("listening on " + (P2P_SYNC_PORT || config.port));
+        if (P2P_PEERS) {
+            let unknownNum = 1;
+            for (const address of parsePeerAddresses(P2P_PEERS)) {
+                const existingPeer = this.findPeerByAddress(address);
+                if (existingPeer) { // the peer was already loaded from cache
+                    continue;
+                }
+                this.createPeer("unknown-peer-" + unknownNum as InstanceName, address);
+                unknownNum++;
+            }
+        }
+
+        if (P2P_SYNC_PORT === 0) throw new Error("P2P_SYNC_PORT cannot be 0"); 
+
+        this.server.listen(P2P_SYNC_PORT, () => {
+            this.logger.log("listening on " + P2P_SYNC_PORT);
             this.heartbeat();
             this.client.connectNextPeer();
             setInterval(() => this.checkStatus(), P2P_CHECK_TIME);
         });
 
     }
-    async loadConfig() {
-        const data = await this.storage.read();
 
-        for (const peer of data.peers) {
-            if (peer.name == this.bot.instanceName) continue;
-
-            this.peers.set(peer.name as InstanceName, new Peer(peer));
-        }
-        this.myself.priority = P2P_PRIORITY || data.priority;
-        this.myself.address = P2P_MY_ADDRESS || data.address;
-
-        this.preferredModules = data.preferredModules;
-
-        this.peers.set(this.bot.instanceName, this.myself);
-
-        for (const peer of (await this.peerCache.read()).peers) {
-            if (this.peers.has(peer.name as InstanceName)) continue;
-            this.peers.set(peer.name as InstanceName, new Peer(peer)); 
-        }
-
-        return data;
-    }
     onMessage(message: FullMessage, rawMessage: RawData, source: WebSocket | "client", loop = false) {
         const peer = this.peers.get(message.source);
         if (!peer) {
             if (message.type == MessageType.instanceInfo && !loop) {
-                this.peers.set(message.source, new Peer({ name: message.source, address: message.address }));
-                const peersArray = Array.from(this.peers.values()).filter(peer => (peer.address !== undefined && peer.address !== "")).map(peer => ({ name: peer.name, address: peer.address! }))
-                this.peerCache.save({ peers: peersArray });
+                this.createPeer(message.source, message.address, { updateCache: true });
                 this.logger.warn("Unknown peer: " + message.source);
                 this.onMessage(message, rawMessage, source, true);
             }
@@ -698,6 +696,27 @@ class SyncHandler {
     private messageId() {
         return this.currentMessageId++;
     }
+    private createPeer(name: InstanceName, address: PeerAddress | undefined, opts?: { updateCache: boolean }) {
+        const peer = new Peer(name, address);
+        this.peers.set(name, peer);
+        if (opts?.updateCache) {
+            const peersArray = Array.from(this.peers.values()).filter(peer => (peer.address !== undefined && peer.address !== "")).map(peer => ({ name: peer.name, address: peer.address! }))
+            this.peerCache.save({ peers: peersArray });
+        }
+        return peer;
+    }
+    renamePeer(peer: Peer, name: InstanceName, opts?: { updateCache: boolean }) {
+        this.peers.delete(peer.name);
+        this.peers.set(name, peer);
+        if (opts?.updateCache) {
+            const peersArray = Array.from(this.peers.values()).filter(peer => (peer.address !== undefined && peer.address !== "")).map(peer => ({ name: peer.name, address: peer.address! }))
+            this.peerCache.save({ peers: peersArray });
+        }
+        return peer;
+    }
+    private findPeerByAddress(address: PeerAddress) {
+        return mapOperations.find(this.peers, (_, peer) => peer.address === address)?.value;
+    }
 }
 
 class SyncHandlerClient {
@@ -798,6 +817,9 @@ class SyncHandlerClient {
                 this.syncHandler.onMessage(message, data, "client");
 
             if (message.type === MessageType.hello) {
+                if (peer.name.startsWith("unknown-peer")) {
+                    this.syncHandler.renamePeer(peer, message.source, { updateCache: true });
+                }
                 gotHello = this.processHello(message, peer);
                 if (gotHello) this.syncHandler.onClientConnected(peer);
             }
@@ -851,6 +873,15 @@ class SyncHandlerClient {
     }
 }
 
+function parsePeerAddresses(string: string): PeerAddress[] {
+    const addresses = string.replace(/ /g, "").split(",");
+    for (const address of addresses) {
+        if (!(Address4.isValid(address) || Address6.isValid(address))) {
+            throw new Error(`Peer address "${address}" is not valid.`);
+        }
+    }
+    return addresses as PeerAddress[]
+}
 
 function loadCerts() {
     const caCert = readFileSync("./certs/ca.crt");
