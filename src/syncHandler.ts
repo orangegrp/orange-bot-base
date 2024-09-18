@@ -522,7 +522,7 @@ class SyncHandler {
 
         await sleep(P2P_GIVE_UP_TIME);
 
-        if (this.hasPeers()) {
+        if (this.hasPeers() || this.inControl) {
             return;
         }
 
