@@ -115,7 +115,8 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
             await this.collection.update(this.pocketId, { [key]: this.cache![key] });
         }
         else {
-            await this.collection.create({ id: this.pocketId, [key]: this.cache![key] })
+            //@ts-expect-error it doesn't know what this type is
+            await this.create({ [key]: this.cache![key] })
         }
         this.exists_db = true;
     }
@@ -127,7 +128,8 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
             await this.collection.update(this.pocketId, { [key]: value });
         }
         else {
-            await this.collection.create({ id: this.pocketId, [key]: value })
+            //@ts-expect-error this happens due to objects which aren't set here
+            await this.create({ [key]: value });
         }
         this.exists_db = true;
     }
@@ -137,7 +139,7 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
             await this.fetch();
         }
 
-        const validatedData: { [key: string]: any } = {}
+        const validatedData: Partial<ConfigValuesObj<Values>> = {}
 
         for (const key in data) {
             const value = data[key];
@@ -150,12 +152,23 @@ class _Configurable<Values extends ConfigValues<ConfigValueScope>> implements Co
             await this.collection.update(this.pocketId, validatedData);
         }
         else {
-            validatedData.id = this.pocketId;
-            await this.collection.create(validatedData)
+            await this.create(validatedData);
         }
         this.exists_db = true;
         this.bot.syncHandler?.expireConfigCache(this.configName, this.scope, this.id);
         return true;
+    }
+    private async create(data: Partial<ConfigValuesObj<Values>>) {
+        const fullData: { id: string, [i: string]: any } = { id: this.pocketId };
+        for (const name in this.values) {
+            if (data[name] !== undefined) {
+                fullData[name] = data[name];
+            }
+            else if (this.values[name].default) { // set defaults
+                fullData[name] = this.values[name].default;
+            }
+        }
+        await this.collection.create(fullData);
     }
     private async fetch(): Promise<ConfigValuesObj<Values>> {
         if (CACHE_EXPIRY_MS) {
