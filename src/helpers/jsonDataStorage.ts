@@ -48,9 +48,9 @@ class JsonDataStorage<SCHEMA extends JsonSchema, T extends ParseSchema<SCHEMA>> 
                         this.logger.error(err);
                         return reject();
                     }
+                    this.logger.log(`Created data file ${this.dataPath}`)
                     return resolve();
                 })
-                this.logger.log(`Created data file ${this.dataPath}`)
                 this.generateJsonSchema();
                 return resolve();
             })
