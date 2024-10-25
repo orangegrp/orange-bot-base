@@ -11,6 +11,8 @@ import type { Module, ModuleData } from "./module.js";
 import { ConfigValueScope } from "./ConfigStorage/types.js";
 import type { InstanceName, UniqueString } from "./types.js";
 import { Address4, Address6 } from "ip-address"
+import crypto from "crypto";
+import os from "os";
 
 const CACHE_PATH = "./.cache/SyncHandler/p2p-cache.json";
 
@@ -24,7 +26,36 @@ const P2P_DEAD_TIME = 2000; // how long after last heartbeat to consider a peer 
 const P2P_GIVE_UP_TIME = 5000; // how long to wait after being unable to connect anywhere before assuming control of everything
 const P2P_CHECK_TIME = 5000; // how often to check if peers dissappear
 
-type MapUpdateAction = 'set' | 'delete' | 'clear' | 'notify'
+type MapUpdateAction = 'set' | 'delete' | 'clear' | 'notify';
+
+function generateRandomPriority(code_length: number = 3, crypto_length: number = 16, generations: number = 300): number {
+    function generate(code_length: number = 3, crypto_length: number = 16): string {
+        const randomBytes = crypto.randomBytes(Math.ceil(crypto_length / 2)).toString('hex');
+        const numericalString = randomBytes.replace(/[a-f]/gi, () => Math.floor(Math.random() * 10).toString());
+
+        const currentTime = Date.now();
+        const uptimeInMilliseconds = os.uptime() * 1000;
+        const timeSeed = currentTime - uptimeInMilliseconds;
+
+        const randomIndex = Math.floor((timeSeed + Math.random()) % (numericalString.length - code_length));
+        const selectedDigits = numericalString.slice(randomIndex, randomIndex + code_length);
+
+        return selectedDigits;
+    }
+
+    let numbers: string[] = [];
+    for (let i = 0; i < generations; i++) {
+        numbers.push(generate(code_length, crypto_length));
+    }
+
+    const selectionSeed = parseInt(generate(), 10);
+    const floorOrCeil = Math.round((selectionSeed + Math.random()) % 1);
+    const randomIndex = floorOrCeil > 4
+        ? Math.ceil((selectionSeed + Math.random() * (1 + floorOrCeil)) % numbers.length)
+        : Math.floor((selectionSeed + Math.random() * (1 - floorOrCeil)) % numbers.length);
+    
+    return Number(numbers[randomIndex]);
+}
 
 interface MapUpdateEvent<K, V> {
     action: MapUpdateAction;
@@ -214,7 +245,7 @@ class SyncHandler {
         this.client = new SyncHandlerClient(this, this.logger);
 
         this.myself = this.createPeer(this.bot.instanceName, P2P_MY_ADDRESS as PeerAddress);
-        this.myself.priority = Date.now();
+        this.myself.priority = generateRandomPriority();
         this.peers.set(this.bot.instanceName, this.myself);
 
         this.logger.log(`Instance: ${this.myself.name}`);
