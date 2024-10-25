@@ -118,7 +118,7 @@ class Bot {
         to.reply(opts);
     }
     private async onLoggedIn() {
-        if (process.env.ENABLE_DEBUG) new DebugModule(this);
+        new DebugModule(this);
         await moduleLoader.done();
 
         const deployer = new CommandDeployer(this, this.token);

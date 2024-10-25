@@ -1,7 +1,7 @@
 import { Module } from "./module.js";
 import type { Bot } from "./bot.js";
 import { ArgType, type Command, type ResolveCommandArgs } from "./command.js";
-import type { APIEmbed, CacheType, ChatInputCommandInteraction, MessagePayload } from "discord.js";
+import type { APIEmbed, CacheType, ChatInputCommandInteraction, Message, MessagePayload } from "discord.js";
 
 const debugCommand = {
     name: "debug",
@@ -47,13 +47,32 @@ type CommandInfo = {
     readonly module: string,
 }
 
+type InteractionOrMessage = ChatInputCommandInteraction<CacheType> | Message<boolean>
+
 class DebugModule {
     readonly module: Module;
     constructor(readonly bot: Bot) {
         this.module = new Module(bot, "debug");
-        this.module.addCommand(debugCommand, (interaction, args) => this.debugCommandExecutor(interaction, args));
+        if (process.env.ENABLE_DEBUG) {
+            this.module.addCommand(debugCommand, (interaction, args) => this.debugCommandExecutor(interaction, args));
+        }
+        this.bot.addChatCommand("debug", (msg, args) => {
+            if (args.length < 2) {
+                if (!this.module.handling) return;
+                msg.reply(`Usage: ${bot.prefix}debug <command | module> <name>`);
+            }
+            if (args[0] == "command") {
+                this.debugCommandExecutor(msg, { subCommandGroup: "command", subCommand: "info", command: args[1] })
+            }
+            else if (args[0] == "module") {
+                this.debugCommandExecutor(msg, { subCommandGroup: "module", subCommand: "info", module: args[1] })
+            }
+            else {
+                msg.reply(`Usage: ${bot.prefix}debug <command | module> <name>`);
+            }
+        });
     }
-    debugCommandExecutor(interaction: ChatInputCommandInteraction<CacheType>, args: ResolveCommandArgs<typeof debugCommand>) {
+    debugCommandExecutor(interaction: InteractionOrMessage, args: ResolveCommandArgs<typeof debugCommand>) {
         if (args.subCommandGroup === "command") {
             const cmdInfo = this.getCommandInfo(args.command);
             if (!cmdInfo) {
@@ -134,7 +153,7 @@ class DebugModule {
         if (!handler) return "None"
         return handler;
     }
-    replyOrMessage(interaction: ChatInputCommandInteraction<CacheType>, embeds: APIEmbed[]) {
+    replyOrMessage(interaction: InteractionOrMessage, embeds: APIEmbed[]) {
         if (this.module.handling) {
             interaction.reply({ embeds });
             return;
